@@ -1,0 +1,21 @@
+[package]
+name = "relay-schema-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+relay-compiler = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "relay-compiler" }
+common = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "common" }
+schema-print = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "schema-print" }
+schema = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "schema" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
+fnv = "1.0"
+graphql-ir = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "graphql-ir" }
+graphql-syntax = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "graphql-syntax" }
+intern = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "intern" }
+docblock-syntax = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "docblock-syntax" }
+relay-docblock = { git = "https://github.com/facebook/relay.git", tag = "v21.0.1", package = "relay-docblock" }

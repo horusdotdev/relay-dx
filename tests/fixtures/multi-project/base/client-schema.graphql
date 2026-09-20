@@ -1,0 +1,6 @@
+extend type Query {
+  """
+  A client-only value shared with dependent projects.
+  """
+  sharedClientValue: String
+}

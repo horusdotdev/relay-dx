@@ -1,0 +1,302 @@
+"""
+The complete Relay kitchen-sink API schema.
+"""
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+"""
+An ISO-8601 timestamp returned by the API.
+"""
+scalar DateTime
+
+"""
+An absolute URL.
+"""
+scalar URL
+
+"""
+Optional presentation metadata for a field.
+"""
+directive @displayLabel(
+  """
+  Human-readable label shown by clients.
+  """
+  label: String
+) on FIELD_DEFINITION
+
+"""
+Objects with stable global identity.
+"""
+interface Node {
+  """
+  A globally unique identifier.
+  """
+  id: ID!
+}
+
+"""
+The permission level assigned to a user.
+"""
+enum UserRole {
+  """
+  Can manage all content and settings.
+  """
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""
+The publication lifecycle of a post.
+"""
+enum PostStatus {
+  DRAFT
+  """
+  Visible to readers in the public feed.
+  """
+  PUBLISHED
+  ARCHIVED
+}
+
+"""
+Optional predicates used when searching posts.
+"""
+input PostFilter {
+  """
+  Matches words in the title or body.
+  """
+  text: String
+  statuses: [PostStatus!]
+  authorId: ID
+}
+
+input UpdatePostInput {
+  id: ID!
+  title: String!
+  status: PostStatus
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+"""
+A person who can author and edit content.
+Supports Unicode: café, 東京, and “smart quotes”; quoted text: "viewer".
+"""
+type User implements Node {
+  id: ID!
+  """
+  The display name shown in feeds.
+  """
+  name: String! @displayLabel(label: "Display name")
+  role: UserRole!
+  avatar: URL
+  email: String @deprecated(reason: "Use the private contact endpoint instead.")
+  posts(first: Int, after: String): PostConnection!
+}
+
+type Post implements Node {
+  id: ID!
+  title: String!
+  body: String!
+  status: PostStatus!
+  publishedAt: DateTime
+  author: User!
+  tags: [String!]!
+}
+
+"""
+A search hit, which may be a user or a post.
+"""
+union SearchResult = User | Post
+
+type SearchResultEdge {
+  cursor: String!
+  node: SearchResult!
+}
+
+type SearchResultConnection {
+  edges: [SearchResultEdge!]!
+  pageInfo: PageInfo!
+}
+
+type PostEdge {
+  cursor: String!
+  node: Post
+}
+
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+}
+
+type ViewerStats {
+  postCount: Int!
+  unreadCount: Int!
+}
+
+"""
+A deliberately wide object used to verify schema extraction does not truncate fields.
+"""
+type LargeObject {
+  field001: String
+  field002: String
+  field003: String
+  field004: String
+  field005: String
+  field006: String
+  field007: String
+  field008: String
+  field009: String
+  field010: String
+  field011: String
+  field012: String
+  field013: String
+  field014: String
+  field015: String
+  field016: String
+  field017: String
+  field018: String
+  field019: String
+  field020: String
+  field021: String
+  field022: String
+  field023: String
+  field024: String
+  field025: String
+  field026: String
+  field027: String
+  field028: String
+  field029: String
+  field030: String
+  field031: String
+  field032: String
+  field033: String
+  field034: String
+  field035: String
+  field036: String
+  field037: String
+  field038: String
+  field039: String
+  field040: String
+  field041: String
+  field042: String
+  field043: String
+  field044: String
+  field045: String
+  field046: String
+  field047: String
+  field048: String
+  field049: String
+  field050: String
+  field051: String
+  field052: String
+  field053: String
+  field054: String
+  field055: String
+  field056: String
+  field057: String
+  field058: String
+  field059: String
+  field060: String
+  field061: String
+  field062: String
+  field063: String
+  field064: String
+  field065: String
+  field066: String
+  field067: String
+  field068: String
+  field069: String
+  field070: String
+  field071: String
+  field072: String
+  field073: String
+  field074: String
+  field075: String
+  field076: String
+  field077: String
+  field078: String
+  field079: String
+  field080: String
+  field081: String
+  field082: String
+  field083: String
+  field084: String
+  field085: String
+  field086: String
+  field087: String
+  field088: String
+  field089: String
+  field090: String
+  field091: String
+  field092: String
+  field093: String
+  field094: String
+  field095: String
+  field096: String
+  field097: String
+  field098: String
+  field099: String
+  field100: String
+  field101: String
+  field102: String
+  field103: String
+  field104: String
+  field105: String
+  field106: String
+  field107: String
+  field108: String
+  field109: String
+  field110: String
+  field111: String
+  field112: String
+  field113: String
+  field114: String
+  field115: String
+  field116: String
+  field117: String
+  field118: String
+  "  Quoted \"value\" with surrounding spaces  "
+  field119: String
+  """
+  """
+  field120: String
+}
+
+"""
+The root of the kitchen-sink API.
+"""
+type Query {
+  """
+  The currently authenticated user.
+  """
+  viewer: User!
+  """
+  Loads any object by its globally unique identifier.
+  """
+  node(
+    """
+    The globally unique identifier to load.
+    """
+    id: ID!
+  ): Node
+  search(filter: PostFilter, first: Int, after: String): SearchResultConnection!
+  stats: ViewerStats!
+  largeObject: LargeObject!
+}
+
+type UpdatePostPayload {
+  post: Post
+  errors: [String!]!
+}
+
+type Mutation {
+  updatePost(input: UpdatePostInput!): UpdatePostPayload!
+}

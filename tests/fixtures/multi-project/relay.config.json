@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/relay-compiler@21.0.1/relay-compiler-config-schema.json",
+  "root": ".",
+  "name": "relay-mcp-multi-project",
+  "sources": {
+    "base/src": "base",
+    "app/src": "app"
+  },
+  "projects": {
+    "base": {
+      "schema": "base/schema.graphql",
+      "schemaExtensions": ["base/client-schema.graphql"],
+      "language": "typescript",
+      "output": "base/__generated__",
+      "codegenCommand": "relay-compiler relay.config.json"
+    },
+    "app": {
+      "base": "base",
+      "schema": "app/schema.graphql",
+      "schemaExtensions": ["app/client-schema.graphql"],
+      "language": "typescript",
+      "output": "app/__generated__",
+      "codegenCommand": "relay-compiler relay.config.json"
+    }
+  }
+}

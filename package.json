@@ -1,0 +1,32 @@
+{
+  "name": "relay-mcp-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp run -r build",
+    "test": "vp test run",
+    "check": "vp check",
+    "format": "vp fmt",
+    "typecheck": "tsc --noEmit",
+    "typecheck:fixture": "vp run --filter @relay-mcp/kitchen-sink typecheck",
+    "relay": "vp run --filter @relay-mcp/kitchen-sink relay",
+    "extract": "node packages/cli/dist/cli.js",
+    "mcp": "node packages/mcp/dist/cli.js"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/node": "^24.0.0",
+    "@types/relay-runtime": "^20.1.0",
+    "graphql": "^16.14.2",
+    "relay-compiler": "21.0.1",
+    "relay-runtime": "21.0.1",
+    "typescript": "^5.9.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
+    "vite-plus": "0.3.3",
+    "zod": "^4.6.5"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

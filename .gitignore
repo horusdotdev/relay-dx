@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+__generated__/
+*.tsbuildinfo
+.vite/
+target/

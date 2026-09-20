@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/relay-compiler@21.0.1/relay-compiler-config-schema.json",
+  "src": "./src",
+  "schema": "./schema.graphql",
+  "schemaExtensions": ["./client-schema.graphql"],
+  "language": "typescript",
+  "featureFlags": {
+    "allow_legacy_relay_resolver_tag": { "kind": "enabled" },
+    "enable_resolver_normalization_ast": true
+  },
+  "customScalarTypes": {
+    "DateTime": "string",
+    "URL": "string"
+  },
+  "codegenCommand": "npm run relay"
+}

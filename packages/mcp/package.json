@@ -1,0 +1,39 @@
+{
+  "name": "@relay-mcp/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for exploring Relay GraphQL schemas",
+  "license": "MIT",
+  "bin": {
+    "relay-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "scripts": {
+    "build": "vp pack",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@relay-mcp/schema": "workspace:*",
+    "graphql": "^16.11.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

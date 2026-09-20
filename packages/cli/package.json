@@ -1,0 +1,28 @@
+{
+  "name": "@relay-mcp/cli",
+  "version": "0.1.0",
+  "description": "Extract the effective GraphQL schema from a Relay project",
+  "license": "MIT",
+  "bin": {
+    "relay-schema": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@relay-mcp/schema": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

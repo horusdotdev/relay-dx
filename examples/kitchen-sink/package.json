@@ -1,0 +1,19 @@
+{
+  "name": "@relay-mcp/kitchen-sink",
+  "private": true,
+  "description": "A small, real Relay compiler project exercising server schema, client extensions, and Relay Resolvers.",
+  "type": "module",
+  "scripts": {
+    "relay": "relay-compiler relay.config.json",
+    "relay:watch": "relay-compiler relay.config.json --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "relay-runtime": "21.0.1"
+  },
+  "devDependencies": {
+    "@types/relay-runtime": "^20.1.0",
+    "relay-compiler": "21.0.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/schema/native
+      - uses: voidzero-dev/setup-vp@v1.21.0
+        with:
+          node-version: "24.18.0"
+          cache: true
+      - run: vp install --frozen-lockfile
+      - run: vp run build
+      - run: vp check
+      - run: vp run typecheck
+      - run: vp run relay
+      - run: vp run typecheck:fixture
+      - run: cargo fmt --manifest-path packages/schema/native/Cargo.toml --check
+      - run: vp test run

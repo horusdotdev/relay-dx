@@ -1,0 +1,16 @@
+packages:
+  - packages/*
+  - examples/*
+
+overrides:
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.3
+  vitest: 4.1.11
+
+# The Vite+ alias implements Vite's API with Vite+'s own version number.
+peerDependencyRules:
+  allowedVersions:
+    vite: 0.3.3
+
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

@@ -1,0 +1,9 @@
+"""
+Shared schema used by every project.
+"""
+type Query {
+  """
+  A value supplied by the shared base project.
+  """
+  sharedValue: String!
+}

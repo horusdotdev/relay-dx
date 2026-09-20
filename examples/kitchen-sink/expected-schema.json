@@ -1,0 +1,39 @@
+{
+  "roots": {
+    "query": "Query",
+    "mutation": "Mutation"
+  },
+  "queryFields": ["dashboard", "modernGreeting", "node", "search", "stats", "tick", "viewer"],
+  "mutationFields": ["updatePost"],
+  "largeObjectFieldCount": 120,
+  "clientExtensionFields": {
+    "User": ["clientLabel"]
+  },
+  "resolverFields": [
+    "ClientDashboard.title",
+    "ProfileCard.headline",
+    "ProfileCard.imageUrl",
+    "Query.dashboard",
+    "Query.modernGreeting",
+    "Query.tick",
+    "User.displayName",
+    "User.greeting",
+    "User.isCurrentUser",
+    "User.profileCard"
+  ],
+  "excludedResolverFields": ["Query.shouldNotAppear"],
+  "resolverTypes": {
+    "ClientDashboard": "strong",
+    "ProfileCard": "weak"
+  },
+  "serverFeatures": [
+    "interface:Node",
+    "union:SearchResult",
+    "enum:PostStatus",
+    "input:PostFilter",
+    "scalar:DateTime",
+    "connection:PostConnection",
+    "deprecation:User.email",
+    "description:Query"
+  ]
+}

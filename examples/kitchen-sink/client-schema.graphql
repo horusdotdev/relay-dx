@@ -1,0 +1,6 @@
+extend type User {
+  """
+  A field added by a client schema extension.
+  """
+  clientLabel: String
+}

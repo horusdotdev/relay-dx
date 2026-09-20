@@ -1,0 +1,32 @@
+{
+  "name": "@relay-mcp/schema",
+  "version": "0.1.0",
+  "description": "The effective Relay GraphQL schema, built by the official Relay compiler",
+  "license": "MIT",
+  "bin": {
+    "relay-schema-native": "./dist/native/relay-schema-native"
+  },
+  "files": [
+    "dist",
+    "native/Cargo.toml",
+    "native/Cargo.lock",
+    "native/src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "graphql": "^16.14.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

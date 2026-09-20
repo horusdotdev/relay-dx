@@ -1,0 +1,7 @@
+"""
+The application schema includes the shared base schema and adds fields.
+"""
+type Query {
+  sharedValue: String!
+  appValue: String!
+}

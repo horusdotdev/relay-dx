@@ -1,0 +1,4 @@
+{
+  "Query": "The application schema includes the shared base schema and adds fields.",
+  "Query.sharedClientValue": "A client-only value shared with dependent projects."
+}
