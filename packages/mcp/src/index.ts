@@ -3,6 +3,7 @@ import { parse, print, validate, type DocumentNode, type GraphQLError } from "gr
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { schemaOverview, searchSchema, typeInfo } from "./schema-utils.js";
+import { PACKAGE_VERSION } from "./version.js";
 import type {
   EffectiveSchema,
   LoadedRelaySchema,
@@ -123,7 +124,7 @@ export async function createRelayMcpServer(
   await state.load();
 
   const server = new McpServer(
-    { name: "relay-dx", version: "0.1.0" },
+    { name: "relay-dx", version: PACKAGE_VERSION },
     {
       instructions:
         "Explore the loaded Relay GraphQL schema with overview, search, inspect, SDL, validation, and refresh tools. This server never executes GraphQL operations or makes network requests. validate_document uses standard GraphQL validation; Relay compiler-specific transforms and conventions may require running the Relay compiler.",

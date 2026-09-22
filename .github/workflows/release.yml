@@ -1,0 +1,217 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Build release tarballs without publishing or creating a version PR
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ inputs.build_only && 'publish' || steps.mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@v1.21.0
+        with:
+          node-version-file: .node-version
+          run-install: false
+          cache: false
+      - run: vp install --frozen-lockfile
+      - uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        if: "!inputs.build_only"
+        id: mode
+
+  version:
+    needs: plan
+    if: needs.plan.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@v1.21.0
+        with:
+          node-version-file: .node-version
+          run-install: false
+          cache: false
+      - run: vp install --frozen-lockfile
+      - uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          script: vp run version-packages
+          pr-title: Release packages
+          commit-message: Version packages
+
+  native-linux:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    # Build both architectures against the same glibc/OpenSSL baseline.
+    container: ubuntu:22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Install native build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential ca-certificates curl git pkg-config libssl-dev
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/schema/native
+          key: ${{ matrix.target }}
+      - name: Build native helper
+        run: node packages/schema/scripts/build.mjs
+        env:
+          RELAY_SCHEMA_NATIVE_ONLY: "1"
+          RELAY_SCHEMA_NATIVE_TARGET: ${{ matrix.target }}
+      - name: Smoke-test native helper
+        run: node scripts/smoke-native.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: packages/schema/dist/native/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  native-desktop:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: win32-x64
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/schema/native
+          key: ${{ matrix.target }}
+      - name: Build native helper
+        run: node packages/schema/scripts/build.mjs
+        env:
+          RELAY_SCHEMA_NATIVE_ONLY: "1"
+          RELAY_SCHEMA_NATIVE_TARGET: ${{ matrix.target }}
+      - name: Smoke-test native helper
+        run: node scripts/smoke-native.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: packages/schema/dist/native/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  pack:
+    needs: [plan, native-linux, native-desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@v1.21.0
+        with:
+          node-version-file: .node-version
+          run-install: false
+          cache: false
+      - run: vp install --frozen-lockfile
+      - name: Build JavaScript packages
+        run: vp run -r build:js
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: .release/native
+      - name: Assemble all native helpers
+        run: node scripts/assemble-native.mjs
+      - run: node scripts/check-native.mjs
+      - run: vp check
+      - run: vp run typecheck
+      - run: vp run relay
+      - run: vp run typecheck:fixture
+      - run: vp test run
+      - uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        id: pack
+        with:
+          publish-plan-artifact-id: ${{ needs.plan.outputs.publish-plan-artifact-id }}
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+          path: .release/packed
+          merge-multiple: true
+      - name: Install and smoke-test the release tarballs
+        run: node scripts/smoke-pack.mjs .release/packed
+
+  publish:
+    needs: pack
+    if: vars.NPM_TRUSTED_PUBLISHING == 'true' && !inputs.build_only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@v1.21.0
+        with:
+          node-version-file: .node-version
+          run-install: false
+          cache: false
+      - run: vp install --frozen-lockfile
+      - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}

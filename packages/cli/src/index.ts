@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { loadRelaySchema } from "@relay-dx/schema";
+import { PACKAGE_VERSION } from "./version.js";
 
 const HELP = `Usage: relay-schema [config-path] [options]
 
@@ -59,7 +60,7 @@ export async function runCli(
       return 0;
     }
     if (values.version) {
-      io.stdout("0.1.0\n");
+      io.stdout(`${PACKAGE_VERSION}\n`);
       return 0;
     }
     if (positionals.length > 1 || (positionals.length > 0 && values.config)) {

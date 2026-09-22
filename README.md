@@ -124,7 +124,8 @@ generate Relay artifacts or persist operations, and does not require Watchman.
 The helper is built for the current machine. Building from source requires
 Rust; using a built package requires a matching native executable. An explicit
 `--native-helper` path (library option `nativeHelperPath`) can override it.
-Cross-platform binary distribution and npm publication are not configured.
+The release workflow builds packages for supported macOS, Linux, and Windows
+targets; npm publishing remains gated until trusted publishing is enabled.
 
 Compatibility is pinned to Relay 21.0.1. Other Relay versions may use different
 configuration or resolver semantics; changing the helper's Relay dependency
@@ -146,6 +147,16 @@ compact file; documentation discarded when creating it cannot be recovered.
 
 See [the extraction research](docs/relay-schema-research.md) and
 [WASM investigation](docs/wasm-research.md) for the upstream APIs and tradeoffs.
+
+## Release packages
+
+`@relay-dx/schema`, `@relay-dx/cli`, and `@relay-dx/mcp` are public packages in
+one fixed Changesets release group. The workspace and kitchen-sink fixture are
+private. The release workflow verifies on Ubuntu, builds native helpers for
+macOS, Linux, and Windows, and uploads packed packages as `changeset-pack-*`
+artifacts. npm publishing is enabled only after the repository variable
+`NPM_TRUSTED_PUBLISHING` is set to `true`; the one-time registry bootstrap and
+trusted-publisher setup are documented in the [release guide](docs/releases.md).
 
 ## Test projects
 

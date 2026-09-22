@@ -51,6 +51,9 @@ function isObject(value: unknown): value is JsonObject {
 }
 const execFileAsync = promisify(execFile);
 const GRAPHQL_EXTENSIONS = new Set([".graphql", ".graphqls", ".gql"]);
+function nativeArtifactDirectory(platform = process.platform, arch = process.arch): string {
+  return `${platform}-${arch}`;
+}
 function diag(
   code: string,
   message: string,
@@ -158,8 +161,12 @@ function helperPath(requested?: string): string | undefined {
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const executable =
     process.platform === "win32" ? "relay-schema-native.exe" : "relay-schema-native";
+  const platformDirectory = nativeArtifactDirectory();
   const candidates = [
+    join(moduleDirectory, "native", platformDirectory, executable),
     join(moduleDirectory, "native", executable),
+    join(moduleDirectory, "../dist/native", platformDirectory, executable),
+    join(moduleDirectory, "../dist/native", executable),
     join(moduleDirectory, "../native/target/release", executable),
     join(moduleDirectory, "../native/target/debug", executable),
   ];

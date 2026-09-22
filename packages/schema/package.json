@@ -2,9 +2,18 @@
   "name": "@relay-dx/schema",
   "version": "0.1.0",
   "description": "The effective Relay GraphQL schema, built by the official Relay compiler",
+  "homepage": "https://github.com/horusdotdev/relay-dx#readme",
+  "bugs": {
+    "url": "https://github.com/horusdotdev/relay-dx/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/horusdotdev/relay-dx.git",
+    "directory": "packages/schema"
+  },
   "bin": {
-    "relay-schema-native": "./dist/native/relay-schema-native"
+    "relay-schema-native": "./dist/bin/relay-schema-native.mjs"
   },
   "files": [
     "dist",
@@ -19,9 +28,22 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public",
+    "executableFiles": [
+      "dist/bin/relay-schema-native.mjs",
+      "dist/native/darwin-arm64/relay-schema-native",
+      "dist/native/darwin-x64/relay-schema-native",
+      "dist/native/linux-arm64/relay-schema-native",
+      "dist/native/linux-x64/relay-schema-native",
+      "dist/native/win32-x64/relay-schema-native.exe"
+    ],
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "vp test run"
+    "test": "vp test run",
+    "build:js": "node scripts/build.mjs --js-only"
   },
   "dependencies": {
     "graphql": "^16.14.2"

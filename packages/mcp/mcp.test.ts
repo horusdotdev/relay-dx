@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildSchema } from "graphql";
 import { describe, expect, it } from "vite-plus/test";
+import manifest from "./package.json" with { type: "json" };
 import { parseCliArgs } from "./src/cli.js";
 import { createRelayMcpServer, type LoadedRelaySchema } from "./src/index.js";
 
@@ -55,6 +56,7 @@ describe("Relay MCP server", () => {
     const { client, server } = await connectedFixture();
     try {
       const tools = await client.listTools();
+      expect(client.getServerVersion()).toEqual({ name: "relay-dx", version: manifest.version });
       expect(tools.tools.map((tool) => tool.name)).toEqual([
         "schema_overview",
         "search_schema",

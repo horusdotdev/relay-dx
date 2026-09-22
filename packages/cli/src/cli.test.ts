@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 import { buildSchema, isObjectType } from "graphql";
+import manifest from "../package.json" with { type: "json" };
 import { runCli } from "./index.js";
 
 const fixture = fileURLToPath(
@@ -32,6 +33,13 @@ describe("relay-schema CLI", () => {
     const { stdout, stderr, io } = capture();
     expect(await runCli(["--help"], io)).toBe(0);
     expect(stdout.join("")).toContain("Usage: relay-schema");
+    expect(stderr).toEqual([]);
+  });
+
+  it("reports the package manifest version", async () => {
+    const { stdout, stderr, io } = capture();
+    expect(await runCli(["--version"], io)).toBe(0);
+    expect(stdout).toEqual([`${manifest.version}\n`]);
     expect(stderr).toEqual([]);
   });
 

@@ -11,9 +11,15 @@
     "typecheck:fixture": "vp run --filter @relay-dx/kitchen-sink typecheck",
     "relay": "vp run --filter @relay-dx/kitchen-sink relay",
     "extract": "node packages/cli/dist/cli.js",
-    "mcp": "node packages/mcp/dist/cli.js"
+    "mcp": "node packages/mcp/dist/cli.js",
+    "changeset": "changeset",
+    "changeset:status": "changeset status",
+    "version-packages": "changeset version && vp install --lockfile-only && vp fmt",
+    "release:pack": "node scripts/check-native.mjs && changeset pack --out-dir .release",
+    "release:publish": "changeset publish --from-pack-dir .release"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^24.0.0",
     "@types/relay-runtime": "^20.1.0",

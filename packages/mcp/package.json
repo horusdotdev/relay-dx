@@ -2,7 +2,16 @@
   "name": "@relay-dx/mcp",
   "version": "0.1.0",
   "description": "MCP server for exploring Relay GraphQL schemas",
+  "homepage": "https://github.com/horusdotdev/relay-dx#readme",
+  "bugs": {
+    "url": "https://github.com/horusdotdev/relay-dx/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/horusdotdev/relay-dx.git",
+    "directory": "packages/mcp"
+  },
   "bin": {
     "relay-mcp": "./dist/cli.js"
   },
@@ -20,9 +29,14 @@
       "import": "./dist/cli.js"
     }
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "vp pack",
-    "test": "vp test run"
+    "test": "vp test run",
+    "build:js": "vp pack"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
