@@ -1,5 +1,5 @@
 {
-  "name": "relay-mcp-workspace",
+  "name": "relay-dx-workspace",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,8 @@
     "check": "vp check",
     "format": "vp fmt",
     "typecheck": "tsc --noEmit",
-    "typecheck:fixture": "vp run --filter @relay-mcp/kitchen-sink typecheck",
-    "relay": "vp run --filter @relay-mcp/kitchen-sink relay",
+    "typecheck:fixture": "vp run --filter @relay-dx/kitchen-sink typecheck",
+    "relay": "vp run --filter @relay-dx/kitchen-sink relay",
     "extract": "node packages/cli/dist/cli.js",
     "mcp": "node packages/mcp/dist/cli.js"
   },

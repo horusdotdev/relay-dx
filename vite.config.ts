@@ -4,10 +4,8 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   resolve: {
     alias: {
-      "@relay-mcp/schema": fileURLToPath(
-        new URL("./packages/schema/src/index.ts", import.meta.url),
-      ),
-      "@relay-mcp/mcp": fileURLToPath(new URL("./packages/mcp/src/index.ts", import.meta.url)),
+      "@relay-dx/schema": fileURLToPath(new URL("./packages/schema/src/index.ts", import.meta.url)),
+      "@relay-dx/mcp": fileURLToPath(new URL("./packages/mcp/src/index.ts", import.meta.url)),
     },
   },
   test: {

@@ -11,7 +11,7 @@ import {
   validate,
   type GraphQLSchema,
 } from "graphql";
-import { loadRelaySchema } from "@relay-mcp/schema";
+import { loadRelaySchema } from "@relay-dx/schema";
 
 const fixtureDirectory = new URL("../examples/kitchen-sink/", import.meta.url);
 

@@ -1,5 +1,5 @@
 {
-  "name": "@relay-mcp/kitchen-sink",
+  "name": "@relay-dx/kitchen-sink",
   "private": true,
   "description": "A small, real Relay compiler project exercising server schema, client extensions, and Relay Resolvers.",
   "type": "module",

@@ -23,7 +23,7 @@ export interface RelaySchemaDiagnostic {
 }
 
 /**
- * The deliberately small contract consumed from @relay-mcp/schema.
+ * The deliberately small contract consumed from @relay-dx/schema.
  * Keeping this structural lets the MCP package work while the loader evolves.
  */
 export interface LoadedRelaySchema {

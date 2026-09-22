@@ -10,8 +10,8 @@
     "resolveJsonModule": true,
     "types": ["node"],
     "paths": {
-      "@relay-mcp/schema": ["./packages/schema/src/index.ts"],
-      "@relay-mcp/mcp": ["./packages/mcp/src/index.ts"]
+      "@relay-dx/schema": ["./packages/schema/src/index.ts"],
+      "@relay-dx/mcp": ["./packages/mcp/src/index.ts"]
     }
   },
   "include": ["packages/**/*.ts", "tests/**/*.ts", "vite.config.ts"],

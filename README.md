@@ -1,16 +1,16 @@
-# Relay schema tools
+# Relay DX
 
 Explore the GraphQL schema available to a Relay application: server schema,
 client schema extensions, and Relay Resolvers together.
 
 This Vite+ monorepo contains:
 
-| Package                   | Purpose                                                        |
-| ------------------------- | -------------------------------------------------------------- |
-| `@relay-mcp/schema`       | Load a Relay project into a `GraphQLSchema` and export its SDL |
-| `@relay-mcp/cli`          | The `relay-schema` extraction command                          |
-| `@relay-mcp/mcp`          | The `relay-mcp` stdio server for AI agents                     |
-| `@relay-mcp/kitchen-sink` | A real Relay project used by integration tests                 |
+| Package                  | Purpose                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `@relay-dx/schema`       | Load a Relay project into a `GraphQLSchema` and export its SDL |
+| `@relay-dx/cli`          | The `relay-schema` extraction command                          |
+| `@relay-dx/mcp`          | The `relay-mcp` stdio server for AI agents                     |
+| `@relay-dx/kitchen-sink` | A real Relay project used by integration tests                 |
 
 ## Build and verify
 
@@ -32,7 +32,7 @@ vp run typecheck
 Build before running the test suite: the stdio integration test launches the
 built MCP executable. The root `.node-version` and `packageManager` field pin
 Node and pnpm. Vite+ handles library packaging, tests, formatting, linting,
-type checking, and workspace task ordering. CI runs on Linux and macOS.
+type checking, and workspace task ordering. CI runs on Ubuntu.
 
 ## Export a schema
 
@@ -66,7 +66,7 @@ paths:
     "relay": {
       "command": "node",
       "args": [
-        "/absolute/path/to/relay-mcp/packages/mcp/dist/cli.js",
+        "/absolute/path/to/relay-dx/packages/mcp/dist/cli.js",
         "--config",
         "/absolute/path/to/app/relay.config.json"
       ]
@@ -101,7 +101,7 @@ not a guarantee that an operation will compile with Relay.
 ## Use the library
 
 ```ts
-import { loadRelaySchema } from "@relay-mcp/schema";
+import { loadRelaySchema } from "@relay-dx/schema";
 
 const result = await loadRelaySchema({
   configPath: "/path/to/app/relay.config.json",

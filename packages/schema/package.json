@@ -1,5 +1,5 @@
 {
-  "name": "@relay-mcp/schema",
+  "name": "@relay-dx/schema",
   "version": "0.1.0",
   "description": "The effective Relay GraphQL schema, built by the official Relay compiler",
   "license": "MIT",

@@ -2,7 +2,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
-import { loadRelaySchema } from "@relay-mcp/schema";
+import { loadRelaySchema } from "@relay-dx/schema";
 
 const HELP = `Usage: relay-schema [config-path] [options]
 

@@ -1,5 +1,5 @@
 {
-  "name": "@relay-mcp/cli",
+  "name": "@relay-dx/cli",
   "version": "0.1.0",
   "description": "Extract the effective GraphQL schema from a Relay project",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "build": "vp pack"
   },
   "dependencies": {
-    "@relay-mcp/schema": "workspace:*"
+    "@relay-dx/schema": "workspace:*"
   },
   "engines": {
     "node": ">=22.18.0"

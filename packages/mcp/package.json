@@ -1,5 +1,5 @@
 {
-  "name": "@relay-mcp/mcp",
+  "name": "@relay-dx/mcp",
   "version": "0.1.0",
   "description": "MCP server for exploring Relay GraphQL schemas",
   "license": "MIT",
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@relay-mcp/schema": "workspace:*",
+    "@relay-dx/schema": "workspace:*",
     "graphql": "^16.11.0",
     "zod": "^4.6.5"
   },
