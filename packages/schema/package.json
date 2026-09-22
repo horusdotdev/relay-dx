@@ -1,6 +1,6 @@
 {
   "name": "@relay-dx/schema",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The effective Relay GraphQL schema, built by the official Relay compiler",
   "homepage": "https://github.com/horusdotdev/relay-dx#readme",
   "bugs": {
