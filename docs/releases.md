@@ -20,7 +20,8 @@ to publish the generated tarballs manually. No npm account is currently
 authenticated in this checkout, and trusted publishing has not been configured.
 
 1. Confirm the Node and Vite+ prerequisites from the root README, then log in
-   to the public npm registry:
+   to the public npm registry with an account that can publish under the
+   `@relay-dx` scope:
 
    ```sh
    npm whoami --registry=https://registry.npmjs.org
@@ -134,7 +135,13 @@ vp run changeset:status
 ```
 
 The version workflow consumes changesets on `main` and opens or updates the
-version PR. On that PR branch, the repository's version script runs:
+version PR. Because it uses `GITHUB_TOKEN`, GitHub requires a maintainer to
+approve the PR's CI run after the bot creates or updates it. Select
+**Approve and run** in GitHub, or approve the specific run with
+`gh api --method POST repos/horusdotdev/relay-dx/actions/runs/<run-id>/approve`.
+See [GitHub's bot-created PR workflow policy](https://github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved/).
+
+On that PR branch, the repository's version script runs:
 
 ```sh
 vp run version-packages
