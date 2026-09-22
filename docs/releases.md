@@ -12,12 +12,21 @@ Windows, then packs the three public packages. Publishing is gated by the
 repository variable `NPM_TRUSTED_PUBLISHING`; until that variable is set to
 `true`, the workflow can verify and pack a release without publishing it.
 
+The initial bootstrap is complete: all three public packages are published at
+`0.1.0`, and their GitHub trusted-publisher registrations for
+`horusdotdev/relay-dx` and `release.yml` have been verified. A fresh registry
+installation passed schema extraction and MCP checks, and the repository
+variable is now set to `true` for future releases.
+
 ## One-time npm bootstrap
 
 The npm package records must exist before npm will accept a trusted-publisher
-configuration. The first release therefore needs an authenticated maintainer
-to publish the generated tarballs manually. No npm account is currently
-authenticated in this checkout, and trusted publishing has not been configured.
+configuration. The three current package records and registrations are already
+bootstrapped at `0.1.0`. Use the following flow only for a newly introduced
+package or a future package whose record does not yet exist.
+
+Set `NPM_TRUSTED_PUBLISHING=false` while bootstrapping a new package so the
+workflow does not attempt to publish it before its trust registration exists.
 
 1. Confirm the Node and Vite+ prerequisites from the root README, then log in
    to the public npm registry with an account that can publish under the
@@ -31,21 +40,18 @@ authenticated in this checkout, and trusted publishing has not been configured.
 
    On an unconfigured machine, the first `npm whoami` is expected to fail with
    an authentication error. Before this bootstrap, `npm view` for these names
-   is expected to report that the packages do not exist.
+   is expected to report that the new package does not exist.
 
-2. Decide which version to bootstrap. The committed initial changeset can be
-   packed as `0.1.0` from the current `main`, or you can let the normal
-   Changesets flow create and merge the version PR first so the first tarballs
-   are `0.1.1`. A version PR is created automatically from `main` when pending
-   changesets are present; inspect it with:
+2. Create and merge the version PR for the new release. A version PR is created
+   automatically from `main` when pending changesets are present; inspect it
+   with:
 
    ```sh
    vp run changeset:status
    ```
 
-   The version job runs `vp run version-packages` on the version PR. Do not run
-   that script twice for the same changesets. Merge the PR to `main` before
-   continuing if you selected the `0.1.1` bootstrap.
+   The version job runs `vp run version-packages` on the version PR. Merge the
+   PR to `main` before continuing.
 
 3. Build the bootstrap release through GitHub Actions. Do not run a local
    build or `vp run release:pack` for this step: a host build would omit the
@@ -64,26 +70,21 @@ authenticated in this checkout, and trusted publishing has not been configured.
 
    The expected files are under `.release/packages/*.tgz`; artifact downloads
    may add another directory level, so use `find` to locate the actual paths.
-   Publish the schema first so the CLI and MCP package dependencies can resolve
-   it, then publish the other two packages. Replace each placeholder with the
-   matching file printed by `find`:
+   Publish only the new package's tarball manually. Replace the placeholder
+   with the matching file printed by `find`:
 
    ```sh
-   npm publish .release/<schema-tarball>.tgz --access public
-   npm publish .release/<cli-tarball>.tgz --access public
-   npm publish .release/<mcp-tarball>.tgz --access public
+   npm publish .release/<new-package-tarball>.tgz --access public
    ```
 
    Verify the package records before configuring trusted publishing:
 
    ```sh
-   npm view @relay-dx/schema version
-   npm view @relay-dx/cli version
-   npm view @relay-dx/mcp version
+   npm view <new-package-name> version
    ```
 
-This manual bootstrap is required once for each package. Do not run it against
-a version that is already published; npm versions are immutable.
+This manual bootstrap is required once for each newly introduced package. Do
+not publish a version that already exists; npm versions are immutable.
 
 ## npm trusted publishing
 
@@ -96,26 +97,24 @@ See the [npm trusted publishers guide](https://docs.npmjs.com/trusted-publishers
 and [npm trust prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust#prerequisites)
 for the current requirements.
 
-For each package, configure GitHub as the trusted publisher. The repository is
-`horusdotdev/relay-dx`, the workflow filename is `release.yml`, and no GitHub
-environment is used:
+The current three registrations have been verified. For a newly introduced
+package, configure GitHub as its trusted publisher. Use repository
+`horusdotdev/relay-dx`, workflow filename `release.yml`, and no GitHub
+environment:
 
 ```sh
-npm trust github @relay-dx/schema --repo horusdotdev/relay-dx --file release.yml --allow-publish
-npm trust github @relay-dx/cli --repo horusdotdev/relay-dx --file release.yml --allow-publish
-npm trust github @relay-dx/mcp --repo horusdotdev/relay-dx --file release.yml --allow-publish
+npm trust github <package-name> --repo horusdotdev/relay-dx --file release.yml --allow-publish
 ```
 
 Check the resulting registrations with:
 
 ```sh
-npm trust list @relay-dx/schema
-npm trust list @relay-dx/cli
-npm trust list @relay-dx/mcp
+npm trust list <package-name>
 ```
 
-Then set the repository variable `NPM_TRUSTED_PUBLISHING` to `true` in GitHub
-Actions settings. The workflow requests `contents: write`,
+Then restore the repository variable `NPM_TRUSTED_PUBLISHING` to `true` and
+run `gh workflow run release.yml --ref main -f build_only=false` to publish
+any remaining versions in the release. The workflow requests `contents: write`,
 `pull-requests: write`, and `id-token: write` for the jobs that need them. In
 the repository settings, enable the option allowing GitHub Actions to create
 and approve pull requests. If the repository setting returns HTTP 409 because

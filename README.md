@@ -48,6 +48,9 @@ node packages/cli/dist/cli.js /path/to/app > /tmp/effective-schema.graphql
 # Multi-project Relay configuration requires an explicit project.
 node packages/cli/dist/cli.js tests/fixtures/multi-project/relay.config.json \
   --project app --output /tmp/app-schema.graphql
+
+# From the published package
+npx @relay-dx/cli /path/to/app/relay.config.json --output /tmp/effective-schema.graphql
 ```
 
 The package exposes the `relay-schema` executable when installed. Omit the
@@ -78,6 +81,19 @@ paths:
 Add `"--project", "web"` for a multi-project config. The package also exposes
 the `relay-mcp` executable when installed. Use the executable directly for
 stdio clients; task-runner output can interfere with the protocol.
+
+For a published installation, use `npx` in the MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "npx",
+      "args": ["--yes", "@relay-dx/mcp", "--config", "/absolute/path/to/app/relay.config.json"]
+    }
+  }
+}
+```
 
 | Tool                | What it returns                                                          |
 | ------------------- | ------------------------------------------------------------------------ |
@@ -125,7 +141,7 @@ The helper is built for the current machine. Building from source requires
 Rust; using a built package requires a matching native executable. An explicit
 `--native-helper` path (library option `nativeHelperPath`) can override it.
 The release workflow builds packages for supported macOS, Linux, and Windows
-targets; npm publishing remains gated until trusted publishing is enabled.
+targets; npm publishing remains gated by the repository release variable.
 
 Compatibility is pinned to Relay 21.0.1. Other Relay versions may use different
 configuration or resolver semantics; changing the helper's Relay dependency
@@ -154,9 +170,10 @@ See [the extraction research](docs/relay-schema-research.md) and
 one fixed Changesets release group. The workspace and kitchen-sink fixture are
 private. The release workflow verifies on Ubuntu, builds native helpers for
 macOS, Linux, and Windows, and uploads packed packages as `changeset-pack-*`
-artifacts. npm publishing is enabled only after the repository variable
-`NPM_TRUSTED_PUBLISHING` is set to `true`; the one-time registry bootstrap and
-trusted-publisher setup are documented in the [release guide](docs/releases.md).
+artifacts. Version `0.1.0` is published, trusted publishing is registered for
+all three packages, and `NPM_TRUSTED_PUBLISHING=true` enables future releases
+after the version PR is merged. See the [release guide](docs/releases.md) for
+the workflow and new-package bootstrap.
 
 ## Test projects
 
