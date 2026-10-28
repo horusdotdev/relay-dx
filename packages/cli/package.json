@@ -1,6 +1,6 @@
 {
   "name": "@relay-dx/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Extract the effective GraphQL schema from a Relay project",
   "homepage": "https://github.com/horusdotdev/relay-dx#readme",
   "bugs": {
