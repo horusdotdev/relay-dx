@@ -1,6 +1,6 @@
 {
   "name": "@relay-dx/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for exploring Relay GraphQL schemas",
   "homepage": "https://github.com/horusdotdev/relay-dx#readme",
   "bugs": {
