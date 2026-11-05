@@ -50,9 +50,13 @@ Search kinds are `SCALAR`, `OBJECT`, `INTERFACE`, `UNION`, `ENUM`, and
 are marked with `isError`.
 
 The resource **`relay://schema/effective`** returns the current SDL as
-`text/plain`. The server loads one project at startup and keeps a snapshot.
-Call `refresh_schema` after editing schema, resolver source, or configuration
-files. A failed refresh leaves the previous snapshot available.
+`text/plain`. The server watches the selected project's schema files or directory,
+client extensions, resolver sources, and Relay config and reloads changes
+automatically, including files created after startup and atomic editor saves.
+In a new worktree, the server stays connected while the schema is missing; tools
+report the load error until the schema becomes available. Failed reloads leave
+the previous valid snapshot available. `refresh_schema` remains available to
+force a reload.
 
 The server reads local schema information. It does not execute application
 resolvers or send operations to a GraphQL endpoint. Descriptions from server
@@ -106,13 +110,18 @@ const server = await createRelayMcpServer({
 await server.connect(new StdioServerTransport());
 ```
 
-`createRelayMcpServer(options?)` loads the schema before resolving to an SDK
-`McpServer`; the caller connects a transport and closes the server when done.
-Options are `configPath`, `project`, `cwd`, and `nativeHelperPath`, plus an
+`createRelayMcpServer(options?)` starts watching and attempts to load the schema
+before resolving to an SDK `McpServer`, even if the initial schema load fails.
+The Relay config must be discoverable and select a valid project. The caller
+connects a transport and closes the server when done, which stops the watchers.
+Options are `configPath`, `project`, `cwd`, `nativeHelperPath`, and `watch`, plus an
 optional `loadSchema` function for embedding or tests. A custom loader returns
 `{ schema, sdl }` synchronously or asynchronously, with optional project,
 compiler, diagnostic, and metadata fields. See the exported
 `RelayMcpServerOptions`, `RelaySchemaLoader`, and `LoadedRelaySchema` types.
+Watching defaults to `true`, or `false` when `loadSchema` is supplied. Set
+`watch: false` to load a snapshot and reject startup on load errors, or
+`watch: true` with a custom loader to watch a local Relay project's inputs.
 
 ## Troubleshooting
 

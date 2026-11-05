@@ -58,6 +58,12 @@ in `package.json` before `relay.config.json` in each directory. A directory
 passed as `configPath` starts discovery there. Executable JavaScript and
 TypeScript configuration files are not supported.
 
+`getRelaySchemaWatchPaths(options?)` accepts the same options and returns absolute
+paths for the selected config, schema inputs, extensions, and resolver sources,
+including base-project inputs. Paths are included even if they do not exist yet,
+so watchers can observe a schema being generated in a new worktree. This function
+resolves configuration without invoking the native helper or loading the schema.
+
 ### Result
 
 | Property                                     | Contents                                                                           |

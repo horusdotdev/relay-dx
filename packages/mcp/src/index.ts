@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { schemaOverview, searchSchema, typeInfo } from "./schema-utils.js";
 import { PACKAGE_VERSION } from "./version.js";
+import { watchRelaySchema } from "./schema-watch.js";
 import type {
   EffectiveSchema,
   LoadedRelaySchema,
@@ -42,7 +43,7 @@ const TOOL_DESCRIPTIONS = {
   validate:
     "Parse and validate a GraphQL document against the effective schema. This performs standard GraphQL validation only; it does not run Relay compiler transforms or prove that a Relay operation satisfies all Relay compiler conventions.",
   refresh:
-    "Reload the effective Relay schema from disk and return its new overview. Use this after schema or Relay config changes.",
+    "Force a reload of the effective Relay schema from disk and return its new overview. Schema, source, and Relay config changes are watched automatically.",
 } as const;
 
 function textResult(payload: Record<string, unknown>, isError = false) {
@@ -85,43 +86,79 @@ function schemaMetadata(
 
 export class RelayMcpState {
   private current: EffectiveSchema | undefined;
+  private loadError: unknown;
+  private pending: Promise<unknown> = Promise.resolve();
+  private watcher: Awaited<ReturnType<typeof watchRelaySchema>> | undefined;
 
   public constructor(
     private readonly loader: RelaySchemaLoader,
     private options: RelaySchemaLoadOptions,
   ) {}
 
-  public async load(overrides: RelaySchemaLoadOptions = {}): Promise<EffectiveSchema> {
-    const nextOptions = { ...this.options, ...overrides };
-    const loaded = await this.loader(nextOptions);
-    if (!loaded || !loaded.schema || typeof loaded.sdl !== "string") {
-      throw new Error("The schema loader returned an invalid result; expected { schema, sdl }.");
-    }
-    this.options = nextOptions;
-    this.current = { loaded, loadedAt: new Date().toISOString(), loadOptions: nextOptions };
-    return this.current;
+  public load(overrides: RelaySchemaLoadOptions = {}): Promise<EffectiveSchema> {
+    const loading = this.pending.then(async () => {
+      try {
+        const nextOptions = { ...this.options, ...overrides };
+        await this.watcher?.update(nextOptions);
+        const loaded = await this.loader(nextOptions);
+        if (!loaded || !loaded.schema || typeof loaded.sdl !== "string") {
+          throw new Error(
+            "The schema loader returned an invalid result; expected { schema, sdl }.",
+          );
+        }
+        this.options = nextOptions;
+        this.current = { loaded, loadedAt: new Date().toISOString(), loadOptions: nextOptions };
+        this.loadError = undefined;
+        return this.current;
+      } catch (error) {
+        this.loadError = error;
+        throw error;
+      }
+    });
+    this.pending = loading.catch(() => {});
+    return loading;
+  }
+
+  public async watch(): Promise<void> {
+    this.watcher = await watchRelaySchema(this.options, () => this.load());
+  }
+
+  public async close(): Promise<void> {
+    await this.watcher?.close();
+    await this.pending;
   }
 
   public get effective(): EffectiveSchema {
-    if (!this.current) throw new Error("The Relay schema has not been loaded.");
+    if (!this.current) throw this.loadError ?? new Error("The Relay schema has not been loaded.");
     return this.current;
   }
 }
 
 /**
- * Build a server and load the effective Relay schema before exposing it.
+ * Build a server and watch the effective Relay schema, including missing files.
  * The returned server is transport-agnostic; callers can use stdio or an
  * in-memory transport in tests.
  */
 export async function createRelayMcpServer(
   options: RelayMcpServerOptions = {},
 ): Promise<McpServer> {
-  const { loadSchema: injectedLoader, ...loadOptions } = options;
+  const {
+    loadSchema: injectedLoader,
+    watch: watchEnabled = !injectedLoader,
+    ...loadOptions
+  } = options;
   const state = new RelayMcpState(
     injectedLoader ?? (loadRelaySchema as RelaySchemaLoader),
     loadOptions,
   );
-  await state.load();
+  if (watchEnabled) {
+    await state.watch();
+    // A worktree may not have its schema yet. Tools report the load error until
+    // a watched change successfully loads it, without dropping the connection.
+    await state.load().catch(() => {});
+  } else {
+    await state.load();
+  }
 
   const server = new McpServer(
     { name: "relay-dx", version: PACKAGE_VERSION },
@@ -130,6 +167,14 @@ export async function createRelayMcpServer(
         "Explore the loaded Relay GraphQL schema with overview, search, inspect, SDL, validation, and refresh tools. This server never executes GraphQL operations or makes network requests. validate_document uses standard GraphQL validation; Relay compiler-specific transforms and conventions may require running the Relay compiler.",
     },
   );
+  const close = server.close.bind(server);
+  server.close = async () => {
+    await state.close();
+    await close();
+  };
+  server.server.onclose = () => {
+    void state.close();
+  };
 
   const overview = () => {
     const effective = state.effective;
