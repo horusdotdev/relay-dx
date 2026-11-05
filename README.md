@@ -102,10 +102,12 @@ For a published installation, use `npx` in the MCP client configuration:
 | `inspect_type`      | Fields, arguments, defaults, deprecations, directives, and relationships |
 | `get_sdl`           | The combined schema as GraphQL SDL                                       |
 | `validate_document` | Standard GraphQL validation results                                      |
-| `refresh_schema`    | Reloaded schema after source/config edits                                |
+| `refresh_schema`    | Force a reload of the configured schema                                  |
 
 The SDL is also available as the resource `relay://schema/effective`.
-The server loads one configured project and keeps a snapshot until refresh.
+The server watches one configured project's schema, extensions, resolver sources,
+and Relay config and reloads changes automatically. It can start before the schema
+exists, then load it when generated. Failed reloads preserve the last valid schema.
 It reads schema information locally; it does not execute application resolvers
 or send operations to a GraphQL endpoint.
 

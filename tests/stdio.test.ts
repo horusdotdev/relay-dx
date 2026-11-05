@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -20,6 +20,43 @@ const expectedDescriptions = JSON.parse(
 ) as Record<string, string>;
 
 describe("built MCP executable", () => {
+  it("keeps stdio connected when the schema is generated after initialization", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "relay-mcp-late-schema-"));
+    await mkdir(join(directory, "src"));
+    await writeFile(
+      join(directory, "src/query.ts"),
+      "const query = graphql`query WatchQuery { __typename }`;",
+    );
+    await writeFile(
+      join(directory, "relay.config.json"),
+      JSON.stringify({ src: "src", schema: "schema.graphql", language: "typescript" }),
+    );
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [binary, "--cwd", directory],
+      stderr: "pipe",
+    });
+    const client = new Client({ name: "relay-mcp-late-schema", version: "1.0.0" });
+    try {
+      await client.connect(transport);
+      expect((await client.callTool({ name: "get_sdl", arguments: {} })).isError).toBe(true);
+      await writeFile(join(directory, "schema.graphql"), "type Query { generated: String }");
+      await expect
+        .poll(
+          async () => {
+            const result = await client.callTool({ name: "get_sdl", arguments: {} });
+            return result.structuredContent;
+          },
+          { timeout: 5000 },
+        )
+        .toMatchObject({ sdl: expect.stringContaining("generated: String") });
+    } finally {
+      await client.close();
+      await transport.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each(["direct", "symlink"])(
     "serves the real kitchen-sink schema over stdio through a %s entry point",
     async (mode) => {

@@ -229,9 +229,7 @@ async function invokeNative(
   }
 }
 
-export async function loadRelaySchema(
-  options: LoadRelaySchemaOptions = {},
-): Promise<RelaySchemaResult> {
+function resolveProject(options: LoadRelaySchemaOptions) {
   const cwd = resolve(options.cwd ?? process.cwd());
   const diagnostics: RelaySchemaDiagnostic[] = [];
   const config = findConfig(cwd, options.configPath, diagnostics);
@@ -256,6 +254,42 @@ export async function loadRelaySchema(
     dirname(config.path),
     multi && typeof raw.root === "string" ? raw.root : ".",
   );
+  return { cwd, diagnostics, config, raw, multi, projects, projectName, project, root };
+}
+
+/** Resolve schema inputs even before the configured schema files exist. */
+export function getRelaySchemaWatchPaths(options: LoadRelaySchemaOptions = {}): string[] {
+  const { config, raw, multi, projects, projectName, project, root } = resolveProject(options);
+  const paths = new Set([config.path]);
+  const add = (value: unknown) => {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (typeof item === "string") paths.add(resolve(root, item));
+    }
+  };
+  add(project.schema ?? project.schemaDir ?? project.schemaCompact);
+  const names = new Set<string>();
+  let name: unknown = projectName;
+  while (typeof name === "string" && !names.has(name) && isObject(projects[name])) {
+    names.add(name);
+    const current = projects[name] as JsonObject;
+    add(current.schemaExtensions);
+    name = current.base;
+  }
+  if (!multi) add(raw.src);
+  else if (isObject(raw.sources)) {
+    for (const [source, selected] of Object.entries(raw.sources)) {
+      const selections = Array.isArray(selected) ? selected : [selected];
+      if (selections.some((item) => typeof item === "string" && names.has(item))) add(source);
+    }
+  }
+  return [...paths];
+}
+
+export async function loadRelaySchema(
+  options: LoadRelaySchemaOptions = {},
+): Promise<RelaySchemaResult> {
+  const { cwd, diagnostics, config, multi, projects, projectName, project, root } =
+    resolveProject(options);
   const schemaPaths = configuredPaths(
     project.schema ?? project.schemaDir ?? project.schemaCompact,
     root,

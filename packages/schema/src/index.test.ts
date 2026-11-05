@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { isObjectType } from "graphql";
-import { loadRelaySchema, RelaySchemaError } from "./index.js";
+import { getRelaySchemaWatchPaths, loadRelaySchema, RelaySchemaError } from "./index.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
@@ -38,6 +38,30 @@ async function fixture() {
 }
 
 describe("loadRelaySchema", () => {
+  it("resolves missing schema inputs and base-project extensions and sources for watching", async () => {
+    const root = await fixture();
+    await writeFile(
+      join(root, "relay.config.json"),
+      JSON.stringify({
+        root: "app",
+        sources: { shared: ["base", "mobile"], web: "web", mobile: "mobile" },
+        projects: {
+          base: { schema: "base.graphql", schemaExtensions: ["base-extensions"] },
+          web: { base: "base", schemaDir: "generated/schema", schemaExtensions: ["web.graphql"] },
+          mobile: { schemaCompact: "mobile.bin" },
+        },
+      }),
+    );
+    expect(getRelaySchemaWatchPaths({ cwd: root, project: "web" })).toEqual([
+      join(root, "relay.config.json"),
+      join(root, "app/generated/schema"),
+      join(root, "app/web.graphql"),
+      join(root, "app/base-extensions"),
+      join(root, "app/shared"),
+      join(root, "app/web"),
+    ]);
+  });
+
   it("loads server SDL, schema extensions, and resolver fields", async () => {
     const root = await fixture();
     const loaded = await loadRelaySchema({ cwd: root });

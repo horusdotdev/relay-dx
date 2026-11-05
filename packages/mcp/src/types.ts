@@ -42,6 +42,8 @@ export type RelaySchemaLoader = (
 ) => LoadedRelaySchema | Promise<LoadedRelaySchema>;
 
 export interface RelayMcpServerOptions extends RelaySchemaLoadOptions {
+  /** Watch local schema inputs. Defaults to true, or false with a custom loader. */
+  watch?: boolean;
   /** Primarily useful to embed and test the server without a Relay project. */
   loadSchema?: RelaySchemaLoader;
 }

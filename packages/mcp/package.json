@@ -41,6 +41,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@relay-dx/schema": "workspace:*",
+    "chokidar": "^5.0.0",
     "graphql": "^16.11.0",
     "zod": "^4.6.5"
   },
