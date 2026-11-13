@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       "@relay-dx/schema": fileURLToPath(new URL("./packages/schema/src/index.ts", import.meta.url)),
       "@relay-dx/mcp": fileURLToPath(new URL("./packages/mcp/src/index.ts", import.meta.url)),
+      "@relay-dx/store": fileURLToPath(new URL("./packages/store/src/index.ts", import.meta.url)),
     },
   },
   test: {

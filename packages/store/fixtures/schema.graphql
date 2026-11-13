@@ -1,0 +1,66 @@
+scalar URL
+scalar JSON
+enum Status {
+  DRAFT
+  PUBLISHED
+}
+input Filter {
+  status: Status
+  nested: NestedFilter
+}
+input NestedFilter {
+  term: String
+  limit: Int
+}
+interface Node {
+  id: ID!
+}
+type User implements Node {
+  getType: String
+  getDataID: String
+  as: String
+  connections: String
+  constructor: String
+  fields: String
+  scope: String
+  then: String
+  id: ID!
+  name: String!
+  avatar: URL
+  opaque: JSON
+  friend: User
+  friends: [User!]!
+  tags: [String!]!
+  posts(filter: Filter, first: Int, after: String): PostConnection!
+  archivedPosts(filter: Filter, first: Int, after: String): PostConnection!
+}
+type Post implements Node {
+  id: ID!
+  title: String!
+  author: User!
+}
+type PostEdge {
+  cursor: String!
+  node: Post
+}
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+type Group implements Node {
+  id: ID!
+  items(filter: Filter, first: Int, after: String): PostConnection!
+}
+type Query {
+  viewer: User!
+  group(id: ID!): Group
+  node(id: ID!): Node
+  count(input: Filter!, scale: Int! = 2, label: String): Int!
+}

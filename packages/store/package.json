@@ -1,0 +1,58 @@
+{
+  "name": "@relay-dx/store",
+  "version": "0.1.3",
+  "description": "Schema-generated type-safe Relay store reads, updaters, and connection helpers",
+  "homepage": "https://github.com/horusdotdev/relay-dx#readme",
+  "bugs": {
+    "url": "https://github.com/horusdotdev/relay-dx/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/horusdotdev/relay-dx.git",
+    "directory": "packages/store"
+  },
+  "bin": {
+    "relay-store": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./generate": {
+      "types": "./dist/generate.d.ts",
+      "import": "./dist/generate.js"
+    },
+    "./cli": {
+      "types": "./dist/command.d.ts",
+      "import": "./dist/command.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:js": "vp pack",
+    "prepare:fixtures": "node scripts/prepare-fixture.ts",
+    "demo": "node scripts/demo.ts",
+    "generate:example": "node dist/cli.js --config ../../examples/kitchen-sink/relay.config.json --output examples/__generated__/store.ts"
+  },
+  "dependencies": {
+    "@relay-dx/schema": "workspace:*",
+    "@types/relay-runtime": "^20.1.0",
+    "graphql": "^16.14.2"
+  },
+  "peerDependencies": {
+    "relay-runtime": "21.0.1"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

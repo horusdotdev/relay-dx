@@ -32,6 +32,8 @@
     "access": "public",
     "executableFiles": [
       "dist/bin/relay-schema-native.mjs",
+      "dist/native/relay-schema-native",
+      "dist/native/relay-schema-native.exe",
       "dist/native/darwin-arm64/relay-schema-native",
       "dist/native/darwin-x64/relay-schema-native",
       "dist/native/linux-arm64/relay-schema-native",

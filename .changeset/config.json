@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [["@relay-dx/schema", "@relay-dx/cli", "@relay-dx/mcp"]],
+  "fixed": [["@relay-dx/schema", "@relay-dx/cli", "@relay-dx/mcp", "@relay-dx/store"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

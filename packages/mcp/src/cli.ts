@@ -4,9 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRelayMcpServer, type RelayMcpServerOptions } from "./index.js";
+import { PACKAGE_VERSION } from "./version.js";
 
 export interface RelayMcpCliOptions extends RelayMcpServerOptions {
   help?: boolean;
+  version?: boolean;
 }
 
 export const HELP_TEXT = `Usage: relay-mcp [config-path] [options]
@@ -22,6 +24,7 @@ Options:
       --native-helper <path>   Native Relay schema helper path
       --cwd <path>              Working directory for schema loading
   -h, --help                   Show this help
+  -v, --version                Show the package version
 
 The MCP JSON-RPC protocol uses stdout. Diagnostics and startup errors use stderr.
 `;
@@ -40,6 +43,10 @@ export function parseCliArgs(argv: readonly string[]): RelayMcpCliOptions {
     const argument = argv[index];
     if (argument === "-h" || argument === "--help") {
       options.help = true;
+      continue;
+    }
+    if (argument === "-v" || argument === "--version") {
+      options.version = true;
       continue;
     }
     if (argument === "-c" || argument === "--config") {
@@ -98,8 +105,12 @@ export async function runCli(
     stdout.write(HELP_TEXT);
     return;
   }
+  if (options.version) {
+    stdout.write(`${PACKAGE_VERSION}\n`);
+    return;
+  }
 
-  const { help: _help, ...serverOptions } = options;
+  const { help: _help, version: _version, ...serverOptions } = options;
   try {
     const server = await createRelayMcpServer(serverOptions);
     await server.connect(new StdioServerTransport());

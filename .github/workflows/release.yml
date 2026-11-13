@@ -185,6 +185,8 @@ jobs:
       - name: Assemble all native helpers
         run: node scripts/assemble-native.mjs
       - run: node scripts/check-native.mjs
+      - name: Generate typed-store test fixtures
+        run: vp run --filter @relay-dx/store prepare:fixtures
       - run: vp check
       - run: vp run typecheck
       - run: vp run relay

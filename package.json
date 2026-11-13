@@ -12,6 +12,7 @@
     "relay": "vp run --filter @relay-dx/kitchen-sink relay",
     "extract": "node packages/cli/dist/cli.js",
     "mcp": "node packages/mcp/dist/cli.js",
+    "smoke:store": "node scripts/smoke-store.mjs",
     "changeset": "changeset",
     "changeset:status": "changeset status",
     "version-packages": "changeset version && vp install --lockfile-only && vp fmt",

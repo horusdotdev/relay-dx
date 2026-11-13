@@ -96,6 +96,21 @@ importers:
         specifier: ^16.14.2
         version: 16.14.2
 
+  packages/store:
+    dependencies:
+      '@relay-dx/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@types/relay-runtime':
+        specifier: ^20.1.0
+        version: 20.1.1
+      graphql:
+        specifier: ^16.14.2
+        version: 16.14.2
+      relay-runtime:
+        specifier: 21.0.1
+        version: 21.0.1
+
 packages:
 
   '@babel/code-frame@7.29.7':

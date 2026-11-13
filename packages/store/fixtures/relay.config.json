@@ -1,0 +1,7 @@
+{
+  "src": "./",
+  "schema": "./schema.graphql",
+  "language": "typescript",
+  "useImportTypeSyntax": true,
+  "customScalarTypes": { "URL": "string" }
+}

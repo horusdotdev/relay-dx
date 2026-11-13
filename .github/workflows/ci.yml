@@ -19,6 +19,7 @@ jobs:
           cache: true
       - run: vp install --frozen-lockfile
       - run: vp run build
+      - run: vp run smoke:store
       - run: vp check
       - run: vp run typecheck
       - run: vp run relay

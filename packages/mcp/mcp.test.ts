@@ -4,10 +4,11 @@ import { buildSchema } from "graphql";
 import { mkdtemp, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { loadRelaySchema } from "@relay-dx/schema";
 import manifest from "./package.json" with { type: "json" };
-import { parseCliArgs } from "./src/cli.js";
+import { parseCliArgs, runCli } from "./src/cli.js";
 import { createRelayMcpServer, RelayMcpState, type LoadedRelaySchema } from "./src/index.js";
 
 const fixtureSdl = /* GraphQL */ `
@@ -365,5 +366,15 @@ describe("Relay MCP server", () => {
     expect(() => parseCliArgs(["relay.config.json", "--config", "other.json"])).toThrow(
       "either positionally",
     );
+  });
+
+  it("prints the package version without starting the server", async () => {
+    for (const flag of ["--version", "-v"]) {
+      const stdout = new PassThrough(),
+        stderr = new PassThrough();
+      await runCli([flag], { stdout, stderr });
+      expect(stdout.read()?.toString()).toBe(`${manifest.version}\n`);
+      expect(stderr.read()).toBeNull();
+    }
   });
 });

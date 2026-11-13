@@ -1,190 +1,113 @@
 # Relay DX
 
-Explore the GraphQL schema available to a Relay application: server schema,
-client schema extensions, and Relay Resolvers together.
+Schema tools and typed store access for Relay: server SDL, client extensions and
+Relay Resolvers together. ESM packages with TypeScript declarations.
 
-This Vite+ monorepo contains:
+| Package                                       | Purpose                               | Command        |
+| --------------------------------------------- | ------------------------------------- | -------------- |
+| [@relay-dx/store](packages/store/README.md)   | Typed reads, updaters and connections | `relay-store`  |
+| [@relay-dx/cli](packages/cli/README.md)       | Export effective SDL                  | `relay-schema` |
+| [@relay-dx/mcp](packages/mcp/README.md)       | Explore schemas through MCP           | `relay-mcp`    |
+| [@relay-dx/schema](packages/schema/README.md) | Load a `GraphQLSchema` and SDL        | —              |
 
-| Package                  | Purpose                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| `@relay-dx/schema`       | Load a Relay project into a `GraphQLSchema` and export its SDL |
-| `@relay-dx/cli`          | The `relay-schema` extraction command                          |
-| `@relay-dx/mcp`          | The `relay-mcp` stdio server for AI agents                     |
-| `@relay-dx/kitchen-sink` | A real Relay project used by integration tests                 |
+## Requirements
 
-## Build and verify
+Requires **Node.js 22.18+** and **Relay 21.0.1**. Config must be JSON, including a
+`relay` object in `package.json`. Release helpers support macOS/Linux arm64/x64
+and Windows x64; Linux needs glibc 2.35+ and OpenSSL 3. No Rust or Watchman needed.
 
-Prerequisites: Node.js 24.18+, [Vite+](https://viteplus.dev/guide/), and a recent
-stable [Rust toolchain](https://rustup.rs/). The native helper uses Rust edition
-2024 and was tested with Rust 1.94.1. The first build downloads and compiles the
-pinned Relay compiler crates; later builds reuse Cargo's cache.
+## Typed store
+
+```sh
+npm install @relay-dx/store
+npx relay-store -o src/__generated__/store.ts
+```
+
+```ts
+import { store } from "./__generated__/store.js";
+
+const name = store.read(environment, (view) => view.get("User", userID)?.name.get());
+
+environment.commitUpdate(
+  store.updater(environment, (view) => {
+    const user = view.get("User", userID);
+    user?.name.set("Ada");
+    user?.posts.connections().removeNodes(postIDs);
+  }),
+);
+```
+
+Fields expose `get`, `require` and updater-only `set`, with schema documentation
+and deprecation markers. Record operations live under `$`. Reads may be null or
+missing; callbacks are synchronous and handles expire afterward.
+[Store reference →](packages/store/README.md)
+
+Relay's low-level record methods accept field names as strings. After refreshing
+the local schema and regenerating, this store interface turns removed fields and
+incompatible writes into TypeScript errors.
+[Schema drift example →](packages/store/README.md#catch-schema-drift)
+
+## Commands
+
+```sh
+# Export SDL.
+npx @relay-dx/cli ./relay.config.json -o schema.graphql
+
+# Start the stdio MCP server.
+npx @relay-dx/mcp --config /absolute/path/to/relay.config.json
+```
+
+Each command accepts `[config-path] [options]`:
+
+| Option                   | Commands      | Meaning                                                                 |
+| ------------------------ | ------------- | ----------------------------------------------------------------------- |
+| `-c, --config <path>`    | All           | Config file or directory; alternative to positional path                |
+| `-p, --project <name>`   | All           | Select a project in a multi-project config                              |
+| `-o, --output <path>`    | schema, store | Write SDL/TypeScript; omit or use `-` for stdout                        |
+| `--cwd <path>`           | mcp, store    | Base directory for discovery and relative paths, including store output |
+| `--native-helper <path>` | All           | Override the bundled helper                                             |
+| `-h, --help`             | All           | Usage                                                                   |
+| `-v, --version`          | All           | Package version                                                         |
+
+Without a config, discovery walks up from the working directory, checking
+`package.json` before `relay.config.json`. Choose positional input or `--config`.
+File output is atomic; diagnostics use stderr. Exit codes: `0` success, `1` error.
+MCP stdout carries JSON-RPC; launch it without task-runner logging.
+
+The low-level `relay-schema-native --config <file> [--project <name>]` returns
+JSON and also accepts `-c`, `-p` and `-h/--help`.
+
+[Schema CLI →](packages/cli/README.md) · [MCP setup and tools →](packages/mcp/README.md)
+
+## Schema library
+
+```sh
+npm install @relay-dx/schema
+```
+
+```ts
+import { loadRelaySchema } from "@relay-dx/schema";
+const { schema, sdl } = await loadRelaySchema({ configPath: "./relay.config.json" });
+```
+
+Extraction preserves descriptions, directives, defaults and deprecations without
+executing resolvers or fetching data. Continue using Relay's compiler for operation
+validation and artifacts. [Library reference →](packages/schema/README.md)
+
+## Development
+
+Source builds need Node.js 24.18+, [Vite+](https://viteplus.dev/guide/) and stable Rust.
+Build before tests to generate fixtures and executables.
 
 ```sh
 vp install
 vp run build
 vp run relay
 vp run typecheck:fixture
+vp run typecheck
 vp test run
 vp check
-vp run typecheck
+vp run smoke:store
 ```
 
-Build before running the test suite: the stdio integration test launches the
-built MCP executable. The root `.node-version` and `packageManager` field pin
-Node and pnpm. Vite+ handles library packaging, tests, formatting, linting,
-type checking, and workspace task ordering. CI runs on Ubuntu.
-
-## Export a schema
-
-From this checkout:
-
-```sh
-node packages/cli/dist/cli.js examples/kitchen-sink/relay.config.json \
-  --output /tmp/effective-schema.graphql
-
-# A project directory or config file can be supplied.
-node packages/cli/dist/cli.js /path/to/app > /tmp/effective-schema.graphql
-
-# Multi-project Relay configuration requires an explicit project.
-node packages/cli/dist/cli.js tests/fixtures/multi-project/relay.config.json \
-  --project app --output /tmp/app-schema.graphql
-
-# From the published package
-npx @relay-dx/cli /path/to/app/relay.config.json --output /tmp/effective-schema.graphql
-```
-
-The package exposes the `relay-schema` executable when installed. Omit the
-config path to discover a config from the current directory. `--output -`
-prints SDL to stdout. File output creates parent directories and replaces the
-destination atomically; errors and status messages go to stderr.
-
-## Connect an MCP client
-
-Add this to your client's MCP server configuration, replacing both absolute
-paths:
-
-```json
-{
-  "mcpServers": {
-    "relay": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/relay-dx/packages/mcp/dist/cli.js",
-        "--config",
-        "/absolute/path/to/app/relay.config.json"
-      ]
-    }
-  }
-}
-```
-
-Add `"--project", "web"` for a multi-project config. The package also exposes
-the `relay-mcp` executable when installed. Use the executable directly for
-stdio clients; task-runner output can interfere with the protocol.
-
-For a published installation, use `npx` in the MCP client configuration:
-
-```json
-{
-  "mcpServers": {
-    "relay": {
-      "command": "npx",
-      "args": ["--yes", "@relay-dx/mcp", "--config", "/absolute/path/to/app/relay.config.json"]
-    }
-  }
-}
-```
-
-| Tool                | What it returns                                                          |
-| ------------------- | ------------------------------------------------------------------------ |
-| `schema_overview`   | Root operation types, type names/counts, and directives                  |
-| `search_schema`     | Matching type/field names, with a result limit                           |
-| `inspect_type`      | Fields, arguments, defaults, deprecations, directives, and relationships |
-| `get_sdl`           | The combined schema as GraphQL SDL                                       |
-| `validate_document` | Standard GraphQL validation results                                      |
-| `refresh_schema`    | Force a reload of the configured schema                                  |
-
-The SDL is also available as the resource `relay://schema/effective`.
-The server watches one configured project's schema, extensions, resolver sources,
-and Relay config and reloads changes automatically. It can start before the schema
-exists, then load it when generated. Failed reloads preserve the last valid schema.
-It reads schema information locally; it does not execute application resolvers
-or send operations to a GraphQL endpoint.
-
-`validate_document` uses GraphQL.js validation, not Relay operation transforms.
-Relay-specific fragment arguments and other compiler conventions still require
-running the Relay compiler. A successful validation result is a schema check,
-not a guarantee that an operation will compile with Relay.
-
-## Use the library
-
-```ts
-import { loadRelaySchema } from "@relay-dx/schema";
-
-const result = await loadRelaySchema({
-  configPath: "/path/to/app/relay.config.json",
-  // project: "web",
-});
-
-console.log(result.schema.getQueryType()?.getFields());
-console.log(result.sdl);
-```
-
-## How extraction works
-
-The schema package calls a small native helper linked against the official
-Relay **21.0.1** compiler crates. It loads Relay configuration and sources,
-then invokes Relay's schema-building pipeline and schema printer. Relay itself
-handles client extensions, resolver docblocks, feature
-flags, source exclusions, and base-project relationships. Extraction does not
-generate Relay artifacts or persist operations, and does not require Watchman.
-
-The helper is built for the current machine. Building from source requires
-Rust; using a built package requires a matching native executable. An explicit
-`--native-helper` path (library option `nativeHelperPath`) can override it.
-The release workflow builds packages for supported macOS, Linux, and Windows
-targets; npm publishing remains gated by the repository release variable.
-
-Compatibility is pinned to Relay 21.0.1. Other Relay versions may use different
-configuration or resolver semantics; changing the helper's Relay dependency
-requires rebuilding and testing against that release. If the target project
-has a different installed `relay-compiler` version, extraction reports the
-mismatch instead of returning a schema built with different semantics.
-
-Configuration input supports JSON files and the `relay` key in `package.json`.
-Executable JavaScript/TypeScript config files are not loaded by this wrapper.
-
-The export preserves documentation descriptions from server SDL, client schema
-extensions, and resolver docblocks, including schema/type/field descriptions,
-arguments, input fields, enum values, and directives. The CLI and MCP expose the
-same descriptions. Compiler type/field structure, applied directives, defaults,
-and deprecations are retained; original formatting and `#` comments are not.
-Compiler-internal fields and directives are included in the export.
-For `schemaCompact` inputs, server descriptions must already be present in the
-compact file; documentation discarded when creating it cannot be recovered.
-
-See [the extraction research](docs/relay-schema-research.md) and
-[WASM investigation](docs/wasm-research.md) for the upstream APIs and tradeoffs.
-
-## Release packages
-
-`@relay-dx/schema`, `@relay-dx/cli`, and `@relay-dx/mcp` are public packages in
-one fixed Changesets release group. The workspace and kitchen-sink fixture are
-private. The release workflow verifies on Ubuntu, builds native helpers for
-macOS, Linux, and Windows, and uploads packed packages as `changeset-pack-*`
-artifacts. Version `0.1.0` is published, trusted publishing is registered for
-all three packages, and `NPM_TRUSTED_PUBLISHING=true` enables future releases
-after the version PR is merged. See the [release guide](docs/releases.md) for
-the workflow and new-package bootstrap.
-
-## Test projects
-
-The [kitchen sink](examples/kitchen-sink/) covers server objects, interfaces,
-unions, inputs, enums, scalars, connections, a mutation, client extensions,
-strong/weak client models, root-fragment and live resolvers, modern resolver
-syntax, an excluded resolver, and an object with more than 100 fields.
-The [multi-project fixture](tests/fixtures/multi-project/) tests base-project
-schema extensions and explicit project selection.
-
-The suite exercises native extraction, the file/stdout CLI, MCP tools with the
-official SDK's in-memory transport, and a built MCP process over real stdio.
+[Release instructions →](docs/releases.md) · [MIT](LICENSE)

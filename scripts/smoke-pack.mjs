@@ -8,8 +8,9 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSchema, isEnumType, isInputObjectType, isInterfaceType, isObjectType } from "graphql";
 import { NATIVE_TARGETS, executableName, validateNativeBinary } from "./native-targets.mjs";
+import { verifyStoreConsumer } from "./store-consumer.mjs";
 
-const PACKAGE_NAMES = ["@relay-dx/schema", "@relay-dx/cli", "@relay-dx/mcp"];
+const PACKAGE_NAMES = ["@relay-dx/schema", "@relay-dx/cli", "@relay-dx/mcp", "@relay-dx/store"];
 const root = fileURLToPath(new URL("../", import.meta.url));
 const fixture = join(root, "examples/kitchen-sink");
 const packDirectory = resolve(process.argv[2] ?? "");
@@ -144,7 +145,7 @@ async function main() {
   const plan = JSON.parse(await readFile(planPath, "utf8"));
   const entries = readPublishEntries(plan);
   if (entries.length === 0) {
-    console.log("No schema, CLI, or MCP packages are being published in this plan; smoke skipped.");
+    console.log("No Relay DX packages are being published in this plan; smoke skipped.");
     return;
   }
 
@@ -187,7 +188,12 @@ async function main() {
   try {
     writeFileSync(
       join(installDirectory, "package.json"),
-      JSON.stringify({ name: "relay-dx-pack-smoke", private: true, version: "1.0.0" }),
+      JSON.stringify({
+        name: "relay-dx-pack-smoke",
+        private: true,
+        version: "1.0.0",
+        type: "module",
+      }),
     );
     run(
       "npm",
@@ -233,8 +239,12 @@ async function main() {
     } else {
       console.log("CLI is absent from this publish subset; skipping CLI checks.");
     }
-    if (packageManifest(installDirectory, "@relay-dx/mcp")) verifyMcpHelp(installDirectory);
-    else console.log("MCP is absent from this publish subset; skipping MCP checks.");
+    if (packageManifest(installDirectory, "@relay-dx/mcp")) {
+      verifyVersion(installDirectory, "@relay-dx/mcp");
+      verifyMcpHelp(installDirectory);
+    } else console.log("MCP is absent from this publish subset; skipping MCP checks.");
+    if (packageManifest(installDirectory, "@relay-dx/store"))
+      verifyStoreConsumer(installDirectory, join(fixture, "relay.config.json"));
   } finally {
     await rm(installDirectory, { recursive: true, force: true });
   }
