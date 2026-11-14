@@ -84,7 +84,7 @@ handles expire afterward. Read-only accessors have no `set` method.
 
 | Access            | Operations                                                                                                                                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Store             | `clientID(type)`, `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                                            |
+| Store             | `createClientID(type)`, `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                                      |
 | View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id, { prune?: boolean })`                                                                                                                    |
 | Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                                                                                             |
 | Linked list       | Updater-only `append(record, args?)`, `prepend(record, args?)`                                                                                                                                                               |
@@ -110,7 +110,7 @@ counts, pagination metadata and singular links are unchanged. Omit it for plain 
 
 ```ts
 // Generate once before committing; reuse the ID in optimistic replays.
-const temporaryID = store.clientID("Post"); // client:Post:<uuid>
+const temporaryID = store.createClientID("Post"); // client:Post:<uuid>
 
 // Inside an updater:
 const post = view.create("Post", temporaryID);
@@ -121,7 +121,7 @@ user.friends.append(otherUser);
 
 The insertion helpers skip records already present by Relay ID, preserving their
 position and cursor. Empty, null or missing lists initialize on insertion. Counts
-and pagination metadata stay unchanged. `clientID` uses `crypto.randomUUID()`.
+and pagination metadata stay unchanged. `createClientID` uses `crypto.randomUUID()`.
 
 ### Connections
 

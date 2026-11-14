@@ -42,7 +42,7 @@ environment.commitUpdate(store.updater(environment, view => {
   const user = view.create("User", "consumer-user");
   user.name.set("Ada");
   view.getRoot().viewer.set(user);
-  const firstID = store.clientID("Post");
+  const firstID = store.createClientID("Post");
   if (!firstID.startsWith("client:Post:")) throw new Error("Installed client ID helper failed");
   const first = view.create("Post", firstID);
   const second = view.create("Post", "consumer-post-2");

@@ -252,7 +252,7 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
 type Sync<R> = R extends PromiseLike<unknown> ? never : R;
 export interface StoreAPI<S extends StoreTypes, Q extends Name<S>> {
   /** Generate once before committing, so optimistic replays reuse the same ID. */
-  clientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
+  createClientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
   read<R>(
     this: void,
     environment: Environment,

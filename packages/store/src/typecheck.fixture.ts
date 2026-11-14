@@ -3,12 +3,12 @@ import type { Environment } from "relay-runtime";
 import { store } from "../fixtures/__generated__/store.js";
 import { store as kitchenStore } from "../examples/__generated__/store.js";
 export function checkStoreTypes(environment: Environment): void {
-  const clientID: `client:Post:${string}` = store.clientID("Post");
-  void clientID;
+  const createClientID: `client:Post:${string}` = store.createClientID("Post");
+  void createClientID;
   // @ts-expect-error Client IDs must name a concrete generated type.
-  store.clientID("Node");
+  store.createClientID("Node");
   // @ts-expect-error Unknown types cannot be used for client IDs.
-  store.clientID("Missing");
+  store.createClientID("Missing");
   store.read(environment, (view) => {
     const user = view.get("User", "id")!;
     const name: string | null | undefined = user.name.get();

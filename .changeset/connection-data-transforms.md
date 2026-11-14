@@ -16,6 +16,6 @@ Add opt-in `delete(type, id, { prune: true })` to remove matching connection edg
 and linked-list entries across the current store and updater before deletion,
 preserving remaining order and metadata with optimistic rollback support.
 
-Add schema-typed `clientID(type)` generation and duplicate-safe connection
+Add schema-typed `createClientID(type)` generation and duplicate-safe connection
 `appendNode`/`prependNode` and linked-list `append`/`prepend` helpers. Existing
 membership is matched by Relay record ID and keeps its position and cursor.

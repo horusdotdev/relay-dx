@@ -710,7 +710,7 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
   }
   // One audited bridge between generated phantom types and checked runtime views.
   return {
-    clientID: (type: string) => {
+    createClientID: (type: string) => {
       if (!definition.types[type]?.concrete)
         throw new Error(`Client IDs require a concrete schema type: ${type}.`);
       return `client:${type}:${globalThis.crypto.randomUUID()}`;

@@ -5,14 +5,14 @@ import { draft, seed } from "../fixtures/environment.js";
 
 describe("client IDs and duplicate-safe collection insertion", () => {
   it("creates unique, namespaced client IDs for concrete types", () => {
-    const first = store.clientID("Post");
+    const first = store.createClientID("Post");
     expect(first).toMatch(
       /^client:Post:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
-    expect(store.clientID("Post")).not.toBe(first);
-    const unsafe = store as unknown as { clientID(type: string): string };
-    expect(() => unsafe.clientID("Node")).toThrow("concrete schema type");
-    expect(() => unsafe.clientID("Missing")).toThrow("concrete schema type");
+    expect(store.createClientID("Post")).not.toBe(first);
+    const unsafe = store as unknown as { createClientID(type: string): string };
+    expect(() => unsafe.createClientID("Node")).toThrow("concrete schema type");
+    expect(() => unsafe.createClientID("Missing")).toThrow("concrete schema type");
   });
 
   it("appends and prepends nodes once, keeping existing positions and cursors", () => {
@@ -168,7 +168,7 @@ describe("client IDs and duplicate-safe collection insertion", () => {
 
   it("reuses a generated ID through optimistic replay and rolls back both collections", () => {
     const environment = seed();
-    const id = store.clientID("Post");
+    const id = store.createClientID("Post");
     let runs = 0;
     const optimistic = environment.applyUpdate({
       storeUpdater: store.updater(environment, (view) => {
