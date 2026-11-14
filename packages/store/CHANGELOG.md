@@ -1,5 +1,13 @@
 # @relay-dx/store
 
+## 0.3.1
+
+### Patch Changes
+
+- b55027a: Accept Relay's environment interface so `read`, `updater` and `withUpdater` work
+  directly with React Relay's `useRelayEnvironment()` without a type cast.
+- @relay-dx/schema@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
