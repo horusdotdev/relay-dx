@@ -1,8 +1,8 @@
 // Compiled by the workspace's tsc --noEmit; these functions are never executed.
-import type { Environment } from "relay-runtime";
+import type { IEnvironment } from "relay-runtime";
 import { store } from "../fixtures/__generated__/store.js";
 import { store as kitchenStore } from "../examples/__generated__/store.js";
-export function checkStoreTypes(environment: Environment): void {
+export function checkStoreTypes(environment: IEnvironment): void {
   const createClientID: `client:Post:${string}` = store.createClientID("Post");
   void createClientID;
   // @ts-expect-error Client IDs must name a concrete generated type.

@@ -1,4 +1,4 @@
-import type { Environment, RecordSourceProxy, Variables } from "relay-runtime";
+import type { IEnvironment, RecordSourceProxy, Variables } from "relay-runtime";
 
 /** Phantom field descriptions emitted by the generator; never constructed. */
 export interface ScalarField<Read = unknown, Write = unknown, Args = object> {
@@ -273,18 +273,18 @@ export interface StoreAPI<S extends StoreTypes, Q extends Name<S>> {
   createClientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
   read<R>(
     this: void,
-    environment: Environment,
+    environment: IEnvironment,
     callback: (store: TypedStore<S, Q, false>) => R & Sync<R>,
   ): R;
   withUpdater<R>(
     this: void,
-    environment: Environment,
+    environment: IEnvironment,
     raw: RecordSourceProxy,
     callback: (store: TypedStore<S, Q, true>) => R & Sync<R>,
   ): R;
   updater<Data = unknown, R = void>(
     this: void,
-    environment: Environment,
+    environment: IEnvironment,
     callback: (store: TypedStore<S, Q, true>, data: Data | null | undefined) => R & Sync<R>,
   ): (raw: RecordSourceProxy, data?: Data | null) => void;
 }

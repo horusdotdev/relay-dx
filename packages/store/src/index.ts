@@ -4,7 +4,7 @@ import {
   ROOT_ID,
   ROOT_TYPE,
   getStorageKey,
-  type Environment,
+  type IEnvironment,
   type RecordProxy,
   type RecordSourceProxy,
   type Variables,
@@ -73,9 +73,9 @@ const recordStates = new WeakMap<object, RuntimeRecord>();
 class Scope {
   active = true;
   readonly definition: SchemaDefinition;
-  readonly environment: Environment;
+  readonly environment: IEnvironment;
   readonly raw: RecordSourceProxy | undefined;
-  constructor(definition: SchemaDefinition, environment: Environment, raw?: RecordSourceProxy) {
+  constructor(definition: SchemaDefinition, environment: IEnvironment, raw?: RecordSourceProxy) {
     this.definition = definition;
     this.environment = environment;
     this.raw = raw;
@@ -717,7 +717,7 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
   definition: SchemaDefinition,
 ): StoreAPI<S, Q> {
   function run(
-    environment: Environment,
+    environment: IEnvironment,
     raw: RecordSourceProxy | undefined,
     callback: (view: unknown) => unknown,
   ): unknown {
@@ -738,15 +738,15 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
         throw new Error(`Client IDs require a concrete schema type: ${type}.`);
       return `client:${type}:${globalThis.crypto.randomUUID()}`;
     },
-    read: (environment: Environment, callback: (view: unknown) => unknown) =>
+    read: (environment: IEnvironment, callback: (view: unknown) => unknown) =>
       run(environment, undefined, callback),
     withUpdater: (
-      environment: Environment,
+      environment: IEnvironment,
       raw: RecordSourceProxy,
       callback: (view: unknown) => unknown,
     ) => run(environment, raw, callback),
     updater:
-      (environment: Environment, callback: (view: unknown, data: unknown) => unknown) =>
+      (environment: IEnvironment, callback: (view: unknown, data: unknown) => unknown) =>
       (raw: RecordSourceProxy, data?: unknown) =>
         run(environment, raw, (view) => callback(view, data)),
   } as StoreAPI<S, Q>;
