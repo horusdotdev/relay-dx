@@ -1,5 +1,12 @@
 # @relay-dx/mcp
 
+## 0.3.0
+
+### Patch Changes
+
+- Updated dependencies [59bb289]
+  - @relay-dx/schema@0.3.0
+
 ## 0.2.0
 
 ### Patch Changes
