@@ -1,11 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use graphql_syntax::{ConstantValue, ExecutableDefinition, OperationKind, Selection, Value};
+use graphql_syntax::{
+    ConstantValue, Directive, ExecutableDefinition, OperationKind, Selection, Value,
+};
 use intern::string_key::Lookup;
 use relay_compiler::{GraphQLAsts, ProjectName, config::Config, config::ProjectConfig};
 use schema::{SDLSchema, Schema, Type};
 
 pub type ConnectionKeys = BTreeMap<String, BTreeMap<String, BTreeSet<String>>>;
+pub type SelectedFields = BTreeMap<String, BTreeMap<String, bool>>;
+
+#[derive(Default)]
+pub struct DocumentMetadata {
+    pub connections: ConnectionKeys,
+    pub selections: SelectedFields,
+}
 
 /// Read Relay's parsed source graph, without generating or executing artifacts.
 pub fn collect(
@@ -13,8 +22,8 @@ pub fn collect(
     config: &Config,
     project: &ProjectConfig,
     asts: &fnv::FnvHashMap<ProjectName, GraphQLAsts>,
-) -> Result<ConnectionKeys, String> {
-    let mut keys = BTreeMap::new();
+) -> Result<DocumentMetadata, String> {
+    let mut keys = DocumentMetadata::default();
     let mut seen = BTreeSet::new();
     let mut name = Some(project.name);
     while let Some(project_name) = name {
@@ -51,7 +60,7 @@ fn visit(
     schema: &SDLSchema,
     parent: Type,
     selections: &[Selection],
-    keys: &mut ConnectionKeys,
+    keys: &mut DocumentMetadata,
 ) -> Result<(), String> {
     for selection in selections {
         match selection {
@@ -60,6 +69,13 @@ fn visit(
                     // Schema extraction also supports projects with unfinished operations.
                     continue;
                 };
+                selected(
+                    keys,
+                    schema,
+                    parent,
+                    field.name.value.lookup(),
+                    &field.directives,
+                );
                 for directive in &field.directives {
                     if !matches!(
                         directive.name.value.lookup(),
@@ -91,7 +107,8 @@ fn visit(
                                 directive.name.value
                             )
                         })?;
-                    keys.entry(schema.get_type_name(parent).lookup().to_owned())
+                    keys.connections
+                        .entry(schema.get_type_name(parent).lookup().to_owned())
                         .or_default()
                         .entry(field.name.value.lookup().to_owned())
                         .or_default()
@@ -116,8 +133,38 @@ fn visit(
                 }
             }
             // Each fragment definition is visited once in its own type context.
-            Selection::FragmentSpread(_) | Selection::ScalarField(_) => {}
+            Selection::ScalarField(field) => {
+                if schema.named_field(parent, field.name.value).is_some() {
+                    selected(
+                        keys,
+                        schema,
+                        parent,
+                        field.name.value.lookup(),
+                        &field.directives,
+                    );
+                }
+            }
+            Selection::FragmentSpread(_) => {}
         }
     }
     Ok(())
+}
+
+fn selected(
+    metadata: &mut DocumentMetadata,
+    schema: &SDLSchema,
+    parent: Type,
+    name: &str,
+    directives: &[Directive],
+) {
+    let required = directives
+        .iter()
+        .any(|directive| directive.name.value.lookup() == "required");
+    metadata
+        .selections
+        .entry(schema.get_type_name(parent).lookup().to_owned())
+        .or_default()
+        .entry(name.to_owned())
+        .and_modify(|value| *value |= required)
+        .or_insert(required);
 }

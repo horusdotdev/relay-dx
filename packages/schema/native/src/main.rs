@@ -34,6 +34,7 @@ struct Output {
     sdl: String,
     descriptions: BTreeMap<String, String>,
     connection_keys: connections::ConnectionKeys,
+    selected_fields: connections::SelectedFields,
     compiler_version: &'static str,
 }
 
@@ -596,13 +597,15 @@ fn run(args: Args) -> Result<Output, String> {
     for (coordinate, description) in collect_descriptions(&schema).into_iter() {
         descriptions.entry(coordinate).or_insert(description);
     }
+    let documents = connections::collect(&schema, &config, project, &graphql_asts)?;
     Ok(Output {
         project_name: name,
         config_path: config_path.display().to_string(),
         root_directory,
         sdl: print(&schema),
         descriptions,
-        connection_keys: connections::collect(&schema, &config, project, &graphql_asts)?,
+        connection_keys: documents.connections,
+        selected_fields: documents.selections,
         compiler_version: "21.0.1",
     })
 }

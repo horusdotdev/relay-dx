@@ -19,3 +19,8 @@ preserving remaining order and metadata with optimistic rollback support.
 Add schema-typed `createClientID(type)` generation and duplicate-safe connection
 `appendNode`/`prependNode` and linked-list `append`/`prepend` helpers. Existing
 membership is matched by Relay record ID and keeps its position and cursor.
+
+Replace `create(type, id)` with `upsert(type, { id, ...fields })`. Generate required
+initializer fields from app-wide selections, semantic nullability and `@required`.
+Argumented fields remain optional; linked fields accept handles without recursive
+validation. Existing records merge supplied fields and preserve omitted fields.

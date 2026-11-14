@@ -24,6 +24,7 @@ export interface LinkedField<
 export interface TypeShape {
   readonly possibleTypes: string;
   readonly concrete: boolean;
+  readonly creation: object;
   readonly scalars: Record<string, ScalarField>;
   readonly links: Record<string, LinkedField>;
   readonly connection: { readonly edge: string; readonly node: string } | null;
@@ -229,6 +230,20 @@ export interface DeleteOptions {
   /** Remove matching connection edges and linked-list entries before deleting the record. */
   readonly prune?: boolean;
 }
+export type FieldInitializer<Value, Arguments> = { readonly value: Value } & ({} extends Arguments
+  ? { readonly args?: Arguments }
+  : { readonly args: Arguments });
+type UpsertRecordInput<S extends StoreTypes, T extends Name<S>> = S[T]["creation"] & {
+  readonly id: string;
+};
+type RequiredCreation<S extends StoreTypes, T extends Name<S>> = {
+  [
+    K in keyof UpsertRecordInput<S, T> as undefined extends UpsertRecordInput<S, T>[K] ? never : K
+  ]: UpsertRecordInput<S, T>[K];
+};
+type CheckCreation<S extends StoreTypes, T extends Name<S>, Values> = {
+  [K in keyof Values]: K extends keyof UpsertRecordInput<S, T> ? UpsertRecordInput<S, T>[K] : never;
+};
 export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends boolean> = {
   get<T extends Name<S>>(type: T, id: string): TypedRecord<S, T, W> | undefined;
   getRoot(): TypedRecord<S, Query, W>;
@@ -245,7 +260,10 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
   >;
 } & (W extends true
   ? {
-      create<T extends Concrete<S>>(type: T, id: string): TypedRecord<S, T, true>;
+      upsert<T extends Concrete<S>, const Values extends RequiredCreation<S, T>>(
+        type: T,
+        values: Values & CheckCreation<S, T, Values>,
+      ): TypedRecord<S, T, true>;
       delete<T extends Name<S>>(type: T, id: string, options?: DeleteOptions): void;
     }
   : {});

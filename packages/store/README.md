@@ -62,8 +62,13 @@ environment.commitUpdate(
     user.posts.get({ first: 20 });
     user.posts.connections().removeNodes(postIDs);
 
-    const post = view.create("Post", "client:new-post");
-    post.author.set(user);
+    const post = view.upsert("Post", {
+      id: "client:new-post",
+      title: "New post",
+      status: "DRAFT",
+      tags: [],
+      author: user,
+    });
     post.author.get()?.name.get();
     user.$.getDataID();
   }),
@@ -77,7 +82,7 @@ Use `store.withUpdater(environment, rawStore, callback)` inside an existing upda
 
 Reads return nullable/missing values even for schema-non-null fields. `require`
 checks only the outer value. Writes follow schema nullability; creation is
-incremental. Callbacks are synchronous: return plain values, since record and field
+typed by app-wide selections. Callbacks are synchronous: return plain values, since record and field
 handles expire afterward. Read-only accessors have no `set` method.
 
 ## Reference
@@ -85,7 +90,7 @@ handles expire afterward. Read-only accessors have no `set` method.
 | Access            | Operations                                                                                                                                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Store             | `createClientID(type)`, `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                                      |
-| View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id, { prune?: boolean })`                                                                                                                    |
+| View              | `get(type, id)`, `getRoot()`, updater-only `upsert(type, fields)` and `delete(type, id, { prune?: boolean })`                                                                                                                |
 | Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                                                                                             |
 | Linked list       | Updater-only `append(record, args?)`, `prepend(record, args?)`                                                                                                                                                               |
 | Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`                                                                                                                                                                                 |
@@ -113,11 +118,27 @@ counts, pagination metadata and singular links are unchanged. Omit it for plain 
 const temporaryID = store.createClientID("Post"); // client:Post:<uuid>
 
 // Inside an updater:
-const post = view.create("Post", temporaryID);
-post.title.set("New post");
+const post = view.upsert("Post", {
+  id: temporaryID,
+  title: "New post",
+  status: "DRAFT",
+  tags: [],
+  author: user,
+});
 user.posts.connections().prependNode(post);
 user.friends.append(otherUser);
 ```
+
+`upsert` creates an absent record or merges supplied fields into an existing one.
+It returns a typed handle, which can be passed into another upsert. Required
+initializer fields follow selected non-null fields across app documents, including
+semantic nullability and `@required`; regenerate before type-checking in CI.
+Linked handles are not checked for completeness. Omitted optional fields stay unchanged.
+Required fields apply on every upsert because the record might be absent; use field
+setters for partial edits to an existing record.
+
+Argumented fields are optional. Initialize specific variants with, for example,
+`label: { args: { locale: "en" }, value: "Hello" }`, or an array of such entries.
 
 The insertion helpers skip records already present by Relay ID, preserving their
 position and cursor. Empty, null or missing lists initialize on insertion. Counts
@@ -143,7 +164,7 @@ for (const key of user.posts.keys()) {
 }
 
 // Explicitly include a connection created in this updater.
-posts.include(view.create("PostConnection", "client:posts")).removeNodes(postIDs);
+posts.include(connectionRecord).removeNodes(postIDs);
 
 // Across every parent, explicitly opt in.
 view.connections("User", "posts", { parents: "all", key: "Feed_posts" }).removeNodes(postIDs);
@@ -201,10 +222,11 @@ const source = generateStore(schema, { scalarTypes: { URL: "string" } });
 ```
 
 Declare `@relay-dx/schema` directly if you import it. `generateStore` returns
-TypeScript; options are `scalarTypes`, `connectionKeys` and `runtimeImport` (default
+TypeScript; options are `scalarTypes`, `connectionKeys`, `selectedFields` and `runtimeImport` (default
 `"@relay-dx/store"`). The CLI reads scalar mappings from the selected config.
 `@relay-dx/store/cli` exports `runCli(args, io?)`, returning an exit code.
-`loadRelaySchema` supplies connection keys automatically. With a plain GraphQL
+`loadRelaySchema` supplies keys and field selections automatically. Without selections,
+upserts conservatively require every non-null field without arguments. With a plain GraphQL
 schema, pass `connectionKeys: { User: { posts: ["Feed_posts"] } }` to register them.
 
 [Source builds and demo](https://github.com/horusdotdev/relay-dx#development) · MIT

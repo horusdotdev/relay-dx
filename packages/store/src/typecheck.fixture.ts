@@ -21,7 +21,7 @@ export function checkStoreTypes(environment: Environment): void {
     // @ts-expect-error Accessors cannot be replaced with scalar values.
     user.name = "No";
     // @ts-expect-error Environment reads do not expose creation.
-    view.create("User", "new");
+    view.upsert("User", { id: "new", name: "Initial", friends: [], tags: [] });
     // @ts-expect-error Deletion, including pruning, requires an updater.
     view.delete("Post", "post", { prune: true });
     // @ts-expect-error List insertion requires an updater.
@@ -64,7 +64,11 @@ export function checkStoreTypes(environment: Environment): void {
   store.updater(environment, async () => {});
   store.updater(environment, (view) => {
     const user = view.get("User", "id")!;
-    const post = view.create("Post", "post");
+    const post = view.upsert("Post", {
+      id: "post",
+      title: "Initial",
+      author: view.get("User", "u1")!,
+    });
     user.friends.append(user);
     user.friends.prepend(user);
     view.getRoot().recentNodes.append(post, { limit: 5 });
@@ -105,7 +109,7 @@ export function checkStoreTypes(environment: Environment): void {
     // @ts-expect-error Plural links do not expose connection operations.
     user.friends.connections();
     // @ts-expect-error Abstract types cannot be instantiated.
-    view.create("Node", "abstract");
+    view.upsert("Node", { id: "abstract" });
     // @ts-expect-error All-parent scans must be explicitly requested.
     view.connections("Group", "items", {});
     // @ts-expect-error Ordinary links are not connections.
@@ -156,7 +160,18 @@ export function checkStoreTypes(environment: Environment): void {
     posts
       .filter((node, edge) => node.title.get() === edge.cursor.get())
       .sort((a, b) => a.title.require().localeCompare(b.title.require()));
-    posts.include(view.create("PostConnection", "client:posts"));
+    posts.include(
+      view.upsert("PostConnection", {
+        id: "client:posts",
+        edges: [],
+        totalCount: 0,
+        pageInfo: view.upsert("PageInfo", {
+          id: "client:page",
+          hasNextPage: false,
+          hasPreviousPage: false,
+        }),
+      }),
+    );
     // @ts-expect-error Include accepts connection records, not node IDs.
     posts.include("client:posts");
     // @ts-expect-error Include checks the connection record type.
@@ -186,7 +201,7 @@ export function checkStoreTypes(environment: Environment): void {
     // @ts-expect-error Resolver reads require RelayReader, not raw store access.
     user.displayName.get();
     // @ts-expect-error Resolver model objects are excluded.
-    view.create("ClientDashboard", "model");
+    view.upsert("ClientDashboard", { id: "model" });
     // @ts-expect-error Internal fields are excluded.
     user.__id.get();
     const result = view.get("SearchResult", "id")!;

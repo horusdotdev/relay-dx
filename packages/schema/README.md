@@ -29,7 +29,8 @@ failures throw `RelaySchemaError` with structured `diagnostics`.
 
 Results include `schema`, `sdl`, `projectName`, `configPath`, `rootDirectory`,
 `schemaPaths`, `schemaExtensionPaths`, `compiler`, `diagnostics` and `connectionKeys`
-(keys grouped by schema type and field, including base-project documents).
+(keys grouped by schema type and field, including base-project documents), plus
+`selectedFields` for selection-aware store initializer generation.
 `getRelaySchemaWatchPaths(options?)` returns watched input paths without invoking
 the helper, including paths that do not exist yet.
 

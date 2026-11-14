@@ -133,12 +133,35 @@ class Scope {
       throw new Error("Linked records must belong to the same updater scope.");
     return state;
   }
-  create(type: string, id: string): RecordView {
+  upsert(type: string, values: Readonly<Record<string, unknown>>): RecordView {
     this.check(true);
-    if (!this.type(type).concrete) throw new Error(`Cannot create abstract type ${type}.`);
-    if (this.raw!.get(id)) throw new Error(`Record ${id} already exists.`);
-    this.raw!.create(id, type);
-    return required(this.get(type, id), id);
+    const definition = this.type(type);
+    if (!definition.concrete) throw new Error(`Cannot upsert abstract type ${type}.`);
+    const id = values.id;
+    if (typeof id !== "string") throw new Error("Record creation requires a string id.");
+    const existing = this.lookup(type, id);
+    for (const name of Object.keys(values)) {
+      if (name !== "id" && !Object.hasOwn(definition.fields, name))
+        throw new Error(`Invalid initializer field ${type}.${name}.`);
+    }
+    if (!existing) this.raw!.create(id, type);
+    const record = required(this.lookup(type, id), id);
+    for (const [name, value] of Object.entries(values)) {
+      if (value === undefined || (name === "id" && !definition.fields.id)) continue;
+      const field = definition.fields[name];
+      const accessor = record.accessor(name, field) as {
+        set?: (value: unknown, args?: Variables) => void;
+      };
+      if (!accessor.set) throw new Error(`Field ${type}.${name} has no supported initializer.`);
+      if (Object.keys(field.args).length) {
+        const initializers = Array.isArray(value) ? value : [value];
+        for (const initializer of initializers) {
+          const item = initializer as { value: unknown; args?: Variables };
+          accessor.set(item.value, item.args);
+        }
+      } else accessor.set(value);
+    }
+    return record.view();
   }
   delete(type: string, id: string, options: DeleteOptions = {}): void {
     this.check(true);
@@ -174,7 +197,7 @@ class Scope {
       get: this.get.bind(this),
       getRoot: this.getRoot.bind(this),
       connections: this.connections.bind(this),
-      ...(this.raw ? { create: this.create.bind(this), delete: this.delete.bind(this) } : {}),
+      ...(this.raw ? { upsert: this.upsert.bind(this), delete: this.delete.bind(this) } : {}),
     };
   }
 }

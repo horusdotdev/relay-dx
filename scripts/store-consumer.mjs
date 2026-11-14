@@ -39,16 +39,19 @@ const environment = new Environment({
 });
 environment.commitUpdate(raw => { raw.getRoot(); });
 environment.commitUpdate(store.updater(environment, view => {
-  const user = view.create("User", "consumer-user");
+  const user = view.upsert("User", { id: "consumer-user", name: "Ada", role: "VIEWER" });
   user.name.set("Ada");
   view.getRoot().viewer.set(user);
   const firstID = store.createClientID("Post");
   if (!firstID.startsWith("client:Post:")) throw new Error("Installed client ID helper failed");
-  const first = view.create("Post", firstID);
-  const second = view.create("Post", "consumer-post-2");
+  const first = view.upsert("Post", { id: firstID, title: "Zulu", status: "DRAFT", author: user, tags: [] });
+  const second = view.upsert("Post", { id: "consumer-post-2", title: "Alpha", status: "DRAFT", author: user, tags: [] });
   first.title.set("Zulu");
   second.title.set("Alpha");
-  const record = view.create("PostConnection", "consumer-posts");
+  const record = view.upsert("PostConnection", {
+    id: "consumer-posts", edges: [],
+    pageInfo: view.upsert("PageInfo", {id: "consumer-page", hasNextPage: false}),
+  });
   record.edges.set([]);
   user.posts.set(record);
   const keys: readonly "KitchenSinkQuery_posts"[] = user.posts.keys();

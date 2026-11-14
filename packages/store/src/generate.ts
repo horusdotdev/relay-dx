@@ -7,6 +7,8 @@ import {
   isListType,
   isNonNullType,
   isObjectType,
+  valueFromASTUntyped,
+  type GraphQLField,
   type GraphQLInputType,
   type GraphQLNamedType,
   type GraphQLOutputType,
@@ -20,6 +22,8 @@ export interface GenerateStoreOptions {
   runtimeImport?: string;
   /** Keys from Relay source documents. loadRelaySchema supplies these through schema extensions. */
   connectionKeys?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
+  /** Selected fields by type; true additionally requires the field via @required. */
+  selectedFields?: Readonly<Record<string, Readonly<Record<string, boolean>>>>;
 }
 const q = JSON.stringify;
 const primitives: Record<string, string> = {
@@ -70,12 +74,44 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
     .filter((type) => !type.name.startsWith("__") && !hasDirective(type, "__RelayResolverModel"));
   const included = new Set(types.map((type) => type.name));
   const relay = schema.extensions.relay as
-    | { connectionKeys?: GenerateStoreOptions["connectionKeys"] }
+    | {
+        connectionKeys?: GenerateStoreOptions["connectionKeys"];
+        selectedFields?: GenerateStoreOptions["selectedFields"];
+      }
     | undefined;
   const connectionKeys = options.connectionKeys ?? relay?.connectionKeys ?? {};
+  const selectedFields = options.selectedFields ?? relay?.selectedFields;
+  const possible = (value: (typeof types)[number]) =>
+    isObjectType(value) ? [value.name] : schema.getPossibleTypes(value).map((item) => item.name);
+  function semanticLevels(field: GraphQLField<unknown, unknown>): Set<number> {
+    const directive = field.astNode?.directives?.find(
+      (item) => item.name.value === "semanticNonNull",
+    );
+    if (!directive) return new Set();
+    const argument = directive.arguments?.find((item) => item.name.value === "levels");
+    const levels: unknown = argument ? valueFromASTUntyped(argument.value) : [0];
+    if (!Array.isArray(levels) || levels.some((level) => !Number.isInteger(level) || level < 0))
+      throw new Error(`Invalid semanticNonNull levels for ${field.name}.`);
+    return new Set(levels as number[]);
+  }
+  function selection(type: (typeof types)[number], field: GraphQLField<unknown, unknown>) {
+    const levels = semanticLevels(field);
+    let selected = selectedFields === undefined;
+    const current = possible(type);
+    for (const [ownerName, fields] of Object.entries(selectedFields ?? {})) {
+      if (!Object.hasOwn(fields, field.name)) continue;
+      const owner = schema.getType(ownerName);
+      if (!owner || (!isObjectType(owner) && !isInterfaceType(owner))) continue;
+      if (!current.some((name) => possible(owner).includes(name))) continue;
+      const inherited = owner.getFields()[field.name];
+      if (!inherited) continue;
+      selected = true;
+      for (const level of semanticLevels(inherited)) levels.add(level);
+      if (fields[field.name]) levels.add(0);
+    }
+    return { levels, required: selected && (isNonNullType(field.type) || levels.has(0)) };
+  }
   function fieldKeys(type: (typeof types)[number], name: string, target: string): string[] {
-    const possible = (value: (typeof types)[number]) =>
-      isObjectType(value) ? [value.name] : schema.getPossibleTypes(value).map((item) => item.name);
     const current = possible(type);
     const keys = new Set<string>();
     for (const [ownerName, fields] of Object.entries(connectionKeys)) {
@@ -113,6 +149,17 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
         : scalar(inner).text;
     return `${value}${read || !isNonNullType(type) ? " | null" : ""}${read ? " | undefined" : ""}`;
   }
+  function creationValue(type: GraphQLOutputType, levels: Set<number>, depth = 0): string {
+    const inner = isNonNullType(type) ? type.ofType : type;
+    const value = isListType(inner)
+      ? `ReadonlyArray<${creationValue(inner.ofType, levels, depth + 1)}>`
+      : isCompositeType(inner)
+        ? `LinkedRecordInput<StoreSchema, ${q(inner.name)}>`
+        : scalar(inner).writable
+          ? scalar(inner).text
+          : "never";
+    return `${value}${!isNonNullType(type) && !levels.has(depth) ? " | null" : ""}`;
+  }
   function connection(type: GraphQLNamedType): TypeDefinition["connection"] {
     if (!isObjectType(type)) return undefined;
     const fields = type.getFields();
@@ -148,6 +195,7 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
     const fields: Record<string, FieldDefinition> = {};
     const scalars: string[] = [];
     const links: string[] = [];
+    const creation: string[] = [];
     if (isObjectType(type) || isInterfaceType(type)) {
       for (const field of Object.values(type.getFields()).sort((a, b) =>
         a.name.localeCompare(b.name),
@@ -179,6 +227,14 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
           );
         }
         const writable = composite || scalar(target).writable;
+        const selected = selection(type, field);
+        const creationType = writable ? creationValue(field.type, selected.levels) : "never";
+        const initializer = field.args.length
+          ? `FieldInitializer<${creationType}, ${argsText}> | ReadonlyArray<FieldInitializer<${creationType}, ${argsText}>>`
+          : creationType;
+        creation.push(
+          `${jsdoc(field, "      ")}      readonly ${q(field.name)}${selected.required && field.args.length === 0 ? "" : "?"}: ${initializer};`,
+        );
         const keys =
           composite && !ref.element && connection(target)
             ? fieldKeys(type, field.name, target.name)
@@ -209,9 +265,9 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
       ...(shape ? { connection: shape } : {}),
     };
     shapes.push(
-      `${jsdoc(type, "  ")}  ${q(type.name)}: {\n    concrete: ${isObjectType(type)};\n    possibleTypes: ${possibleTypes.map((name) => q(name)).join(" | ") || "never"};\n    scalars: {\n${scalars.join("\n")}\n    };\n    links: {\n${links.join("\n")}\n    };\n    connection: ${shape ? `{ edge: ${q(shape.edge)}; node: ${q(shape.node)} }` : "null"};\n  };`,
+      `${jsdoc(type, "  ")}  ${q(type.name)}: {\n    concrete: ${isObjectType(type)};\n    possibleTypes: ${possibleTypes.map((name) => q(name)).join(" | ") || "never"};\n    creation: {\n${creation.join("\n")}\n    };\n    scalars: {\n${scalars.join("\n")}\n    };\n    links: {\n${links.join("\n")}\n    };\n    connection: ${shape ? `{ edge: ${q(shape.edge)}; node: ${q(shape.node)} }` : "null"};\n  };`,
     );
   }
   const definition: SchemaDefinition = { query: query.name, types: definitions };
-  return `// Generated by the experimental @relay-dx/store generator. Do not edit.\nimport { createStoreAPI, type ScalarField, type LinkedField } from ${q(options.runtimeImport ?? "@relay-dx/store")};\n\n${declarations.join("\n\n")}\n\nexport type StoreSchema = {\n${shapes.join("\n")}\n};\n\nexport const store = createStoreAPI<StoreSchema, ${q(query.name)}>(${JSON.stringify(definition, null, 2)} as const);\n`;
+  return `// Generated by the experimental @relay-dx/store generator. Do not edit.\nimport { createStoreAPI, type ScalarField, type LinkedField, type LinkedRecordInput, type FieldInitializer } from ${q(options.runtimeImport ?? "@relay-dx/store")};\n\n${declarations.join("\n\n")}\n\nexport type StoreSchema = {\n${shapes.join("\n")}\n};\n\nexport const store = createStoreAPI<StoreSchema, ${q(query.name)}>(${JSON.stringify(definition, null, 2)} as const);\n`;
 }

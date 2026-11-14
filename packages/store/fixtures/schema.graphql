@@ -1,5 +1,6 @@
 scalar URL
 scalar JSON
+directive @semanticNonNull(levels: [Int] = [0]) on FIELD_DEFINITION
 enum Status {
   DRAFT
   PUBLISHED
@@ -41,6 +42,20 @@ type Post implements Node {
   id: ID!
   title: String!
   author: User!
+  body: String!
+}
+type CreationFixture {
+  id: ID!
+  title: String!
+  semantic: String @semanticNonNull
+  items: [String] @semanticNonNull(levels: [1])
+  strictItems: [String] @semanticNonNull(levels: [0, 1])
+  nested: [[Int]] @semanticNonNull(levels: [0, 2])
+  optional: String
+  conditional: String!
+  requiredLabel: String
+  argumented(locale: String!): String!
+  unselected: String!
 }
 type PostEdge {
   cursor: String!

@@ -8,6 +8,38 @@ import { loadRelaySchema } from "@relay-dx/schema";
 import { generateStore } from "./generate.js";
 
 describe("schema-generated record types", () => {
+  it("tightens initializer requirements when another document starts selecting a non-null field", () => {
+    const schema = buildSchema(
+      "type Query { post: Post } type Post { id: ID! title: String! body: String! }",
+    );
+    const before = generateStore(schema, { selectedFields: { Post: { id: false, title: false } } });
+    expect(before).toContain('readonly "body"?: string;');
+    const after = generateStore(schema, {
+      selectedFields: { Post: { id: false, title: false, body: false } },
+    });
+    expect(after).toContain('readonly "body": string;');
+    expect(after).not.toContain('readonly "body"?: string;');
+  });
+
+  it("inherits selected semantic non-null requirements from interfaces", () => {
+    const schema = buildSchema(`directive @semanticNonNull(levels: [Int] = [0]) on FIELD_DEFINITION
+      interface Named { name: String @semanticNonNull }
+      type User implements Named { id: ID! name: String }
+      type Query { user: User }`);
+    expect(generateStore(schema, { selectedFields: { Named: { name: false } } })).toContain(
+      'readonly "name": string;',
+    );
+  });
+
+  it("collects selected fields and fragment-local required annotations", async () => {
+    const loaded = await loadRelaySchema({
+      configPath: fileURLToPath(new URL("../fixtures/relay.config.json", import.meta.url)),
+    });
+    expect(loaded.selectedFields.CreationFixture.requiredLabel).toBe(true);
+    expect(loaded.selectedFields.CreationFixture.conditional).toBe(false);
+    expect(loaded.selectedFields.CreationFixture).not.toHaveProperty("unselected");
+    expect(loaded.selectedFields.Post).not.toHaveProperty("body");
+  });
   it("includes base-project keys without leaking keys from other projects", async () => {
     const directory = await mkdtemp(join(tmpdir(), "relay-connection-keys-"));
     try {

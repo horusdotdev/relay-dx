@@ -22,8 +22,16 @@ describe("client IDs and duplicate-safe collection insertion", () => {
         const connection = view
           .get("Group", "g1")!
           .items.connection("StoreFixture_feed", { filter: draft })!;
-        const third = view.create("Post", "p3");
-        const fourth = view.create("Post", "p4");
+        const third = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
+        const fourth = view.upsert("Post", {
+          id: "p4",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         third.id.set("same-scalar-id");
         fourth.id.set("same-scalar-id");
         connection.prependNode(view.get("Post", "p2")!);
@@ -54,7 +62,11 @@ describe("client IDs and duplicate-safe collection insertion", () => {
     environment.commitUpdate(
       store.updater(environment, (view) => {
         const family = view.get("User", "u1")!.posts.connections();
-        const post = view.create("Post", "p3");
+        const post = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         family.prependNode(post);
         family.appendNode(post);
         for (const connection of family.variants())
@@ -80,7 +92,11 @@ describe("client IDs and duplicate-safe collection insertion", () => {
         const typed = view
           .get("Group", "g1")!
           .items.connection("StoreFixture_feed", { filter: draft })!;
-        const post = view.create("Post", "p3");
+        const post = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         typed.appendNode(post);
         typed.appendNode(post);
       });
@@ -102,7 +118,11 @@ describe("client IDs and duplicate-safe collection insertion", () => {
         root.recentNodes.set([first, null, second], { limit: 10 });
         root.recentNodes.prepend(second, { limit: 10 });
         root.recentNodes.append(first, { limit: 10 });
-        const third = view.create("Post", "p3");
+        const third = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         root.recentNodes.append(third, { limit: 10 });
         root.recentNodes.append(third, { limit: 10 });
         expect(root.recentNodes.require({ limit: 10 }).map((node) => node?.$.getDataID())).toEqual([
@@ -115,7 +135,12 @@ describe("client IDs and duplicate-safe collection insertion", () => {
         root.recentNodes.set(null);
         root.recentNodes.prepend(second);
         expect(root.recentNodes.require().map((node) => node?.$.getDataID())).toEqual(["p2"]);
-        const user = view.create("User", "new-user");
+        const user = view.upsert("User", {
+          id: "new-user",
+          name: "Initial",
+          friends: [],
+          tags: [],
+        });
         user.friends.append(view.get("User", "u1")!);
         expect(user.friends.require().map((node) => node?.$.getDataID())).toEqual(["u1"]);
         root.requiredNodes.append(first, { input: draft });
@@ -173,7 +198,11 @@ describe("client IDs and duplicate-safe collection insertion", () => {
     const optimistic = environment.applyUpdate({
       storeUpdater: store.updater(environment, (view) => {
         runs++;
-        const post = view.create("Post", id);
+        const post = view.upsert("Post", {
+          id: id,
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         view.getRoot().recentNodes.append(post);
         view.getRoot().recentNodes.append(post);
         view.get("Group", "g1")!.items.connections().prependNode(post);

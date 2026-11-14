@@ -114,7 +114,16 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
     });
     environment.commitUpdate(
       kitchenStore.updater(environment, (view) => {
-        const record = view.create("SearchResultConnection", "client:results");
+        const record = view.upsert("SearchResultConnection", {
+          id: "client:results",
+          edges: [],
+          pageInfo: view
+            .get(
+              "PostConnection",
+              ConnectionHandler.getConnectionID("g1", "StoreFixture_feed", { filter: draft }),
+            )!
+            .pageInfo.require(),
+        });
         record.edges.set([]);
         const family = view.getRoot().search.connections().include(record);
         const connection = family.variants()[0]!;
@@ -171,7 +180,7 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
     environment.commitUpdate(
       store.updater(environment, (view) => {
         const user = view.get("User", "u1")!;
-        const next = view.create("User", "u3");
+        const next = view.upsert("User", { id: "u3", name: "Initial", friends: [], tags: [] });
         next.name.set("Lin");
         user.name.set("Changed");
         user.friend.set(next);
@@ -309,7 +318,11 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
     const environment = seed();
     environment.commitUpdate(
       store.updater(environment, (view) => {
-        const post = view.create("Post", "p3");
+        const post = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         post.title.set("New");
         post.author.set(view.get("User", "u1")!);
         const connection = view
@@ -413,7 +426,11 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
       store.updater(environment, (view) => {
         view.get("Post", "p1")!.title.set("Beta");
         view.get("Post", "p2")!.title.set("Alpha");
-        const post = view.create("Post", "p3");
+        const post = view.upsert("Post", {
+          id: "p3",
+          title: "Initial",
+          author: view.get("User", "u1")!,
+        });
         post.title.set("Beta");
         const family = view.get("Group", "g1")!.items.connections();
         for (const connection of family.variants())
@@ -513,7 +530,9 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
         expect(() => bypass.avatar.set({ object: true })).toThrow("Object-valued");
         expect("set" in bypass.opaque).toBe(false);
         expect(() => bypass.friend.set(view.get("Post", "p1")!)).toThrow("expected User");
-        expect(() => view.create("User", "u1")).toThrow("already exists");
+        expect(
+          view.upsert("User", { id: "u1", name: "Initial", friends: [], tags: [] }).name.get(),
+        ).toBe("Initial");
         expect(() => view.delete("Post", "u1")).toThrow("expected Post");
       });
     });

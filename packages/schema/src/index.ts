@@ -37,7 +37,10 @@ export interface RelaySchemaResult {
   diagnostics: RelaySchemaDiagnostic[];
   /** @connection keys grouped by schema parent type and field, including base projects. */
   connectionKeys: RelayConnectionKeys;
+  /** Selected fields by schema type; true marks a field selected with @required. */
+  selectedFields: RelaySelectedFields;
 }
+export type RelaySelectedFields = Readonly<Record<string, Readonly<Record<string, boolean>>>>;
 export type RelayConnectionKeys = Readonly<
   Record<string, Readonly<Record<string, readonly string[]>>>
 >;
@@ -201,6 +204,7 @@ async function invokeNative(
   compiler_version: string;
   descriptions: Record<string, string>;
   connection_keys: RelayConnectionKeys;
+  selected_fields: RelaySelectedFields;
 }> {
   const args = ["--config", configPath];
   if (project) args.push("--project", project);
@@ -218,9 +222,12 @@ async function invokeNative(
       compiler_version: string;
       descriptions: Record<string, string>;
       connection_keys: RelayConnectionKeys;
+      selected_fields: RelaySelectedFields;
     };
-    if (!output.connection_keys)
-      throw new Error("The native helper does not provide connection keys; update or rebuild it.");
+    if (!output.connection_keys || !output.selected_fields)
+      throw new Error(
+        "The native helper does not provide document metadata; update or rebuild it.",
+      );
     return output;
   } catch (error) {
     const stderr =
@@ -384,6 +391,7 @@ export async function loadRelaySchema(
       native: true,
       compilerVersion: native.compiler_version,
       connectionKeys: native.connection_keys,
+      selectedFields: native.selected_fields,
     },
   };
   return {
@@ -397,5 +405,6 @@ export async function loadRelaySchema(
     compiler: { path: helper, version: native.compiler_version, available: true },
     diagnostics,
     connectionKeys: native.connection_keys,
+    selectedFields: native.selected_fields,
   };
 }
