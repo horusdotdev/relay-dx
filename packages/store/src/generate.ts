@@ -18,6 +18,8 @@ export interface GenerateStoreOptions {
   /** Primitive TypeScript mappings from the selected Relay project. */
   scalarTypes?: Readonly<Record<string, unknown>>;
   runtimeImport?: string;
+  /** Keys from Relay source documents. loadRelaySchema supplies these through schema extensions. */
+  connectionKeys?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 }
 const q = JSON.stringify;
 const primitives: Record<string, string> = {
@@ -67,6 +69,25 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
     .filter(isCompositeType)
     .filter((type) => !type.name.startsWith("__") && !hasDirective(type, "__RelayResolverModel"));
   const included = new Set(types.map((type) => type.name));
+  const relay = schema.extensions.relay as
+    | { connectionKeys?: GenerateStoreOptions["connectionKeys"] }
+    | undefined;
+  const connectionKeys = options.connectionKeys ?? relay?.connectionKeys ?? {};
+  function fieldKeys(type: (typeof types)[number], name: string, target: string): string[] {
+    const possible = (value: (typeof types)[number]) =>
+      isObjectType(value) ? [value.name] : schema.getPossibleTypes(value).map((item) => item.name);
+    const current = possible(type);
+    const keys = new Set<string>();
+    for (const [ownerName, fields] of Object.entries(connectionKeys)) {
+      const owner = schema.getType(ownerName);
+      if (!owner || (!isObjectType(owner) && !isInterfaceType(owner))) continue;
+      if (!current.some((name) => possible(owner).includes(name))) continue;
+      const field = owner.getFields()[name];
+      if (!field || getNamedType(field.type).name !== target) continue;
+      for (const key of fields[name] ?? []) keys.add(key);
+    }
+    return [...keys].sort();
+  }
   function scalar(type: GraphQLNamedType): { text: string; writable: boolean } {
     if (isEnumType(type))
       return {
@@ -158,10 +179,20 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
           );
         }
         const writable = composite || scalar(target).writable;
-        fields[field.name] = { kind: composite ? "link" : "scalar", type: ref, args, writable };
+        const keys =
+          composite && !ref.element && connection(target)
+            ? fieldKeys(type, field.name, target.name)
+            : undefined;
+        fields[field.name] = {
+          kind: composite ? "link" : "scalar",
+          type: ref,
+          args,
+          writable,
+          ...(keys ? { connectionKeys: keys } : {}),
+        };
         if (composite) {
           links.push(
-            `${jsdoc(field, "      ")}      ${q(field.name)}: LinkedField<${q(target.name)}, ${Boolean(ref.element)}, ${ref.nullable}, ${ref.element?.nullable ?? false}, ${argsText}>;`,
+            `${jsdoc(field, "      ")}      ${q(field.name)}: LinkedField<${q(target.name)}, ${Boolean(ref.element)}, ${ref.nullable}, ${ref.element?.nullable ?? false}, ${argsText}, ${keys?.map((key) => q(key)).join(" | ") || "never"}>;`,
           );
         } else {
           scalars.push(

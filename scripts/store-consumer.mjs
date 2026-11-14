@@ -42,6 +42,26 @@ environment.commitUpdate(store.updater(environment, view => {
   const user = view.create("User", "consumer-user");
   user.name.set("Ada");
   view.getRoot().viewer.set(user);
+  const first = view.create("Post", "consumer-post-1");
+  const second = view.create("Post", "consumer-post-2");
+  first.title.set("Zulu");
+  second.title.set("Alpha");
+  const record = view.create("PostConnection", "consumer-posts");
+  record.edges.set([]);
+  user.posts.set(record);
+  const keys: readonly "KitchenSinkQuery_posts"[] = user.posts.keys();
+  if (keys.join() !== "KitchenSinkQuery_posts") throw new Error("Installed connection keys failed");
+  for (const key of keys) user.posts.connections(key);
+  const posts = user.posts.connections().include(record);
+  const connection = posts.variants()[0]!;
+  connection.insertEdgeAfter(connection.createEdge(first));
+  connection.insertEdgeAfter(connection.createEdge(second));
+  posts.sort((a, b) => a.title.require().localeCompare(b.title.require()));
+  if (connection.nodes()[0]?.title.get() !== "Alpha") throw new Error("Installed connection sort failed");
+  posts.filter(post => post.title.get() === "Alpha");
+  if (connection.nodes().length !== 1) throw new Error("Installed connection filter failed");
+  view.delete("Post", "consumer-post-2", { prune: true });
+  if (connection.record.edges.require().length !== 0 || view.get("Post", "consumer-post-2")) throw new Error("Installed deletion pruning failed");
 }));
 const name = store.read(environment, view => view.getRoot().viewer.require().name.require());
 if (name !== "Ada") throw new Error("Installed store failed to read its update");
@@ -50,10 +70,14 @@ function checkTypes() {
     const user = view.get("User", "consumer-user")!;
     // @ts-expect-error Published declarations must reject invalid scalar values.
     user.name.set(42);
+    // @ts-expect-error Connection keys are restricted to the field's Relay documents.
+    user.posts.connections("KitchenSinkQuery_search");
   });
   store.read(environment, view => {
     // @ts-expect-error Published declarations must exclude read-only writes.
     view.get("User", "consumer-user")!.name.set("No");
+    // @ts-expect-error Published declarations must keep connection mutations updater-only.
+    view.get("User", "consumer-user")!.posts.connections().filter(() => false);
   });
 }
 `,

@@ -28,7 +28,8 @@ before `relay.config.json`. JS/TS configs are unsupported. Calls reload from dis
 failures throw `RelaySchemaError` with structured `diagnostics`.
 
 Results include `schema`, `sdl`, `projectName`, `configPath`, `rootDirectory`,
-`schemaPaths`, `schemaExtensionPaths`, `compiler` and `diagnostics`.
+`schemaPaths`, `schemaExtensionPaths`, `compiler`, `diagnostics` and `connectionKeys`
+(keys grouped by schema type and field, including base-project documents).
 `getRelaySchemaWatchPaths(options?)` returns watched input paths without invoking
 the helper, including paths that do not exist yet.
 

@@ -1,8 +1,6 @@
 # @relay-dx/store
 
-Schema-generated, typed Relay record access with field documentation and
-`@deprecated` markers. Requires Relay 21.0.1, Node.js 22.18+ for generation, and a
-runtime with `structuredClone`. ESM with declarations; verified with TypeScript 5.9.
+Typed Relay store reads, updaters and connection helpers, generated from your schema.
 
 ## Install and generate
 
@@ -11,7 +9,7 @@ npm install @relay-dx/store
 npx relay-store -o src/__generated__/store.ts
 ```
 
-Regenerate after schema, client-extension or resolver changes. Continue running
+Regenerate after schema, resolver or Relay document changes. Continue running
 Relay's compiler for operation artifacts.
 
 ## Catch schema drift
@@ -84,37 +82,65 @@ handles expire afterward. Read-only accessors have no `set` method.
 
 ## Reference
 
-| Access            | Operations                                                                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Store             | `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                     |
-| View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id)`                                                                |
-| Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                    |
-| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`                                                                                                        |
-| Connection field  | `connections({ keys?, candidateIDs? })`                                                                                                             |
-| Connection family | `variants()`, `get(key, filters?)`, updater-only `removeNodes(ids)`                                                                                 |
-| Connection        | `record`, `createEdge(node)`, `insertEdgeAfter(edge, cursor?)`, `insertEdgeBefore(edge, cursor?)`, `removeNodes(ids)`; mutations require an updater |
+| Access            | Operations                                                                                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Store             | `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                     |
+| View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id, { prune?: boolean })`                                                                           |
+| Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                                                    |
+| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`                                                                                                                                        |
+| Connection field  | `keys()`, `connections(key?)`, `connection(key, filters?)`                                                                                                                          |
+| Connection family | `variants()`, `include(record)`; updater-only `removeNodes(ids)`, `filter(predicate)`, `sort(compare)`                                                                              |
+| Connection        | `record`, `nodes()`; updater-only `createEdge(node)`, `insertEdgeAfter(edge, cursor?)`, `insertEdgeBefore(edge, cursor?)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)` |
 
 `get(type, id)` returns `undefined` for absent/deleted records and throws on a type
 mismatch. `$.as(type)` returns a concrete refinement or `undefined`.
+Interfaces expose their declared fields; unions expose fields after `$.as()`.
+Only valid concrete members are offered, including in connection callbacks.
+
+```ts
+view.delete("Post", postID, { prune: true });
+```
+
+`prune` scans the store and current updater changes, removing matching connection
+edges and linked-list entries before deletion. Remaining items keep their order;
+counts, pagination metadata and singular links are unchanged. Omit it for plain deletion.
 
 ### Connections
 
 ```ts
-user.posts.connections().removeNodes(postIDs); // All published variants on this user.
-view.connections("User", "posts", { parents: "all" }).removeNodes(postIDs);
+// All known keys and cached filter variants for this field.
+const posts = user.posts.connections();
+posts.removeNodes(postIDs); // Every cached filter variant on this user.
+posts
+  .filter((post) => post.title.get()?.includes(searchText) === true)
+  .sort((a, b) => (a.title.get() ?? "").localeCompare(b.title.get() ?? ""));
 
-user.posts
-  .connections({
-    keys: ["Feed_posts"], // Required when fields share a connection type.
-    candidateIDs: [newID], // Include unpublished connections explicitly.
-  })
-  .removeNodes(postIDs);
+// Select one variant by its non-pagination arguments.
+const drafts = user.posts.connection("Feed_posts", { filter: { status: "DRAFT" } });
+drafts?.nodes().map((post) => post.title.get());
+
+// Keys come from @connection directives and are checked against this field.
+for (const key of user.posts.keys()) {
+  user.posts.connections(key).removeNodes(postIDs);
+}
+
+// Explicitly include a connection created in this updater.
+posts.include(view.create("PostConnection", "client:posts")).removeNodes(postIDs);
+
+// Across every parent, explicitly opt in.
+view.connections("User", "posts", { parents: "all", key: "Feed_posts" }).removeNodes(postIDs);
 ```
 
-Scans discover published variants; updater lookups see their current values.
-Removal preserves node records, counts and pagination metadata. Later responses
-can add edges back. Keys, identifying filters and explicit candidate membership
-are caller-supplied; filter values and connection/edge/node types are checked.
+`keys()` includes keys declared in the selected project and its base projects;
+connections for those keys may not currently be cached. Aliases map to the actual
+schema field. Unknown keys, including keys belonging to another field, are rejected.
+`include(record)` adds a same-scope, typed connection record to this selection.
+
+`filter` and stable `sort` edit cached edges using current updater values, keeping
+node records, cursors, counts and pagination metadata. Missing nodes are skipped by
+callbacks and retained; sorting keeps their slots. `nodes()` reads cached nodes;
+outside updaters, use array `filter`/`toSorted` on that result. Callbacks must be
+synchronous. Later server responses can restore or reorder edges.
 
 ### Supported fields
 
@@ -157,8 +183,12 @@ const source = generateStore(schema, { scalarTypes: { URL: "string" } });
 ```
 
 Declare `@relay-dx/schema` directly if you import it. `generateStore` returns
-TypeScript; options are `scalarTypes` and `runtimeImport` (default
+TypeScript; options are `scalarTypes`, `connectionKeys` and `runtimeImport` (default
 `"@relay-dx/store"`). The CLI reads scalar mappings from the selected config.
 `@relay-dx/store/cli` exports `runCli(args, io?)`, returning an exit code.
+`loadRelaySchema` supplies connection keys automatically. With a plain GraphQL
+schema, pass `connectionKeys: { User: { posts: ["Feed_posts"] } }` to register them.
 
 [Source builds and demo](https://github.com/horusdotdev/relay-dx#development) · MIT
+
+Requires Relay 21.0.1, Node.js 22.18+ for generation, and `structuredClone` at runtime.

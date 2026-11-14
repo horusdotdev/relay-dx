@@ -10,13 +10,14 @@ import {
   type Variables,
 } from "relay-runtime";
 import type {
-  ConnectionScan,
+  DeleteOptions,
   FieldDefinition,
   SchemaDefinition,
   StoreAPI,
   StoreTypes,
   TypeReference,
 } from "./types.js";
+import { pruneCollections } from "./prune.js";
 export type * from "./types.js";
 
 // @types/relay-runtime 20 declares this runtime namespace as a class instance.
@@ -125,7 +126,7 @@ class Scope {
     return required(this.raw!.get(record.id), `record ${record.id}`);
   }
   state(view: RecordView): RuntimeRecord {
-    this.check(true);
+    this.check();
     const state = recordStates.get(view);
     if (!state || state.scope !== this)
       throw new Error("Linked records must belong to the same updater scope.");
@@ -138,9 +139,18 @@ class Scope {
     this.raw!.create(id, type);
     return required(this.get(type, id), id);
   }
-  delete(type: string, id: string): void {
+  delete(type: string, id: string, options: DeleteOptions = {}): void {
     this.check(true);
-    if (this.get(type, id)) this.raw!.delete(id);
+    this.type(type);
+    const record = this.lookup(type, id);
+    if (id === ROOT_ID) throw new Error("Cannot delete the root record.");
+    for (const name of Object.keys(options)) {
+      if (name !== "prune") throw new Error(`Unknown delete option: ${name}.`);
+    }
+    if (options.prune !== undefined && typeof options.prune !== "boolean")
+      throw new Error("The prune delete option must be a boolean.");
+    if (options.prune) pruneCollections(this.raw!, this.definition, id);
+    if (record) this.raw!.delete(id);
   }
   getRoot(): RecordView {
     return required(this.get(this.definition.query, ROOT_ID), "root record");
@@ -148,11 +158,15 @@ class Scope {
   connections(
     type: string,
     field: string,
-    options: ConnectionScan & { parents: "all" },
+    options: { parents: "all"; key?: string },
   ): RuntimeFamily {
     this.check();
     if (options.parents !== "all") throw new Error("All-parent scans must be explicit.");
-    return new RuntimeFamily(this, type, field, undefined, options);
+    for (const name of Object.keys(options)) {
+      if (name !== "parents" && name !== "key")
+        throw new Error(`Unknown connection selection option: ${name}.`);
+    }
+    return new RuntimeFamily(this, type, field, undefined, options.key);
   }
   view() {
     return {
@@ -299,9 +313,9 @@ class RuntimeRecord {
     });
     this.scope.native(this).setLinkedRecords(nativeRecords, name, args);
   }
-  connections(field: string, options: ConnectionScan = {}): RuntimeFamily {
+  connections(field: string, key?: string): RuntimeFamily {
     this.scope.check();
-    return new RuntimeFamily(this.scope, this.type, field, this.id, options);
+    return new RuntimeFamily(this.scope, this.type, field, this.id, key);
   }
   view(): RecordView {
     // Public field names never share an object with backend methods or state.
@@ -367,11 +381,21 @@ class RuntimeRecord {
       !field.type.element &&
       this.scope.type(named(field.type)).connection
     ) {
-      accessor.connections = (options: ConnectionScan = {}) => this.connections(name, options);
+      accessor.connections = (key?: string) => this.connections(name, key);
+      accessor.connection = (key: string, filters?: Variables) =>
+        this.connections(name).get(key, filters);
+      accessor.keys = () => {
+        this.scope.check();
+        return Object.freeze([...(field.connectionKeys ?? [])]);
+      };
     }
     return Object.freeze(accessor);
   }
 }
+
+type EdgeView = RecordView | null | undefined;
+type NodePredicate = (node: RecordView, edge: RecordView) => boolean;
+type NodeComparator = (a: RecordView, b: RecordView) => number;
 
 class RuntimeConnection {
   readonly record: RecordView;
@@ -381,6 +405,74 @@ class RuntimeConnection {
     this.scope = scope;
     this.type = type;
     this.record = required(scope.get(type, id), id);
+  }
+  edges(): readonly EdgeView[] | null | undefined {
+    return this.scope.state(this.record).linked("edges", undefined, true) as
+      | readonly EdgeView[]
+      | null
+      | undefined;
+  }
+  node(edge: EdgeView): RecordView | undefined {
+    return edge == null
+      ? undefined
+      : ((this.scope.state(edge).linked("node") as RecordView | null | undefined) ?? undefined);
+  }
+  nodes(): RecordView[] {
+    this.scope.check();
+    return (this.edges() ?? []).flatMap((edge) => {
+      const node = this.node(edge);
+      return node ? [node] : [];
+    });
+  }
+  prepareFilter(predicate: NodePredicate): () => void {
+    this.scope.check(true);
+    const edges = this.edges();
+    if (edges == null) return () => {};
+    const next = edges.filter((edge) => {
+      const node = this.node(edge);
+      if (!node) return true;
+      const keep = predicate(node, required(edge, "connection edge"));
+      if (typeof keep !== "boolean")
+        throw new Error("Connection filter callbacks must return a synchronous boolean.");
+      return keep;
+    });
+    return this.prepareEdges(edges, next);
+  }
+  prepareSort(compare: NodeComparator): () => void {
+    this.scope.check(true);
+    const edges = this.edges();
+    if (edges == null) return () => {};
+    const entries = edges.map((edge) => ({ edge, node: this.node(edge) }));
+    const present = entries.filter((entry): entry is { edge: RecordView; node: RecordView } =>
+      Boolean(entry.node),
+    );
+    present.sort((a, b) => {
+      const order = compare(a.node, b.node);
+      if (typeof order !== "number" || Number.isNaN(order))
+        throw new Error("Connection sort callbacks must return a synchronous number.");
+      return order;
+    });
+    let index = 0;
+    const next = entries.map((entry) => (entry.node ? present[index++].edge : entry.edge));
+    return this.prepareEdges(edges, next);
+  }
+  prepareEdges(previous: readonly EdgeView[], next: readonly EdgeView[]): () => void {
+    if (previous.length === next.length && previous.every((edge, index) => edge === next[index]))
+      return () => {};
+    const native = this.scope.native(this.scope.state(this.record));
+    const records = next.map((edge) =>
+      edge == null ? edge : this.scope.native(this.scope.state(edge)),
+    );
+    // Relay 21 preserves undefined list entries; its v20 declarations omit them.
+    return () => native.setLinkedRecords(records as Array<RecordProxy | null>, "edges");
+  }
+  filter(predicate: NodePredicate): this {
+    this.prepareFilter(predicate)();
+    return this;
+  }
+  sort(compare: NodeComparator): this {
+    this.prepareSort(compare)();
+    return this;
   }
   createEdge(node: RecordView): RecordView {
     this.scope.check(true);
@@ -430,33 +522,54 @@ class RuntimeFamily {
   readonly parentType: string;
   readonly field: string;
   readonly parentID: string | undefined;
-  readonly options: ConnectionScan;
+  readonly key: string | undefined;
+  readonly knownKeys: readonly string[] | undefined;
+  readonly includedIDs = new Set<string>();
   constructor(
     scope: Scope,
     parentType: string,
     field: string,
     parentID: string | undefined,
-    options: ConnectionScan,
+    key?: string,
   ) {
     this.scope = scope;
     this.parentType = parentType;
     this.field = field;
     this.parentID = parentID;
-    this.options = options;
+    if (key !== undefined && typeof key !== "string")
+      throw new Error("Pass the @connection key as a string to connections(key).");
+    this.key = key;
     const definition = scope.type(parentType).fields[field];
     if (!definition || definition.kind !== "link" || definition.type.element)
       throw new Error(`Not a connection field: ${parentType}.${field}`);
     this.target = named(definition.type);
     if (!scope.type(this.target).connection)
       throw new Error(`Not a connection type: ${this.target}`);
+    this.knownKeys = definition.connectionKeys;
+    if (key !== undefined) this.checkKey(key);
+  }
+  checkKey(key: string): void {
+    this.scope.check();
+    if (this.knownKeys && !this.knownKeys.includes(key))
+      throw new Error(`Unknown connection key ${key} for ${this.parentType}.${this.field}.`);
   }
   get(key: string, filters?: Variables): RuntimeConnection | undefined {
     this.scope.check();
+    this.checkKey(key);
     if (!this.parentID) throw new Error("Selecting one connection requires a parent record.");
     const id = ConnectionHandler.getConnectionID(this.parentID, key, filters);
     return this.scope.get(this.target, id)
       ? new RuntimeConnection(this.scope, this.target, id)
       : undefined;
+  }
+  include(...records: readonly RecordView[]): this {
+    this.scope.check();
+    for (const record of records) {
+      const state = this.scope.state(record);
+      this.scope.lookup(this.target, state.id);
+      this.includedIDs.add(state.id);
+    }
+    return this;
   }
   variants(): RuntimeConnection[] {
     this.scope.check();
@@ -473,18 +586,16 @@ class RuntimeFamily {
         (field) =>
           field.kind === "link" && !field.type.element && named(field.type) === this.target,
       );
-      if (matchingFields.length > 1 && !this.options.keys?.length) {
+      if (matchingFields.length > 1 && !this.key && !this.knownKeys) {
         throw new Error(
-          `Ambiguous connection field ${this.parentType}.${this.field}; supply explicit connection keys.`,
+          `Ambiguous connection field ${this.parentType}.${this.field}; pass its @connection key to ${this.field}.connections("Fragment_${this.field}").`,
         );
       }
       for (const key of Object.keys(published)) {
         const handle = key.split("(", 1)[0];
         if (!/^__.+_connection$/.test(handle)) continue;
-        if (
-          this.options.keys &&
-          !this.options.keys.some((candidate) => handle === `__${candidate}_connection`)
-        )
+        if (this.key !== undefined && handle !== `__${this.key}_connection`) continue;
+        if (this.knownKeys && !this.knownKeys.some((key) => handle === `__${key}_connection`))
           continue;
         // Resolve the current link, not its possibly outdated published target.
         const currentID = this.scope.raw
@@ -493,7 +604,7 @@ class RuntimeFamily {
         if (currentID && this.scope.actualType(currentID) === this.target) ids.add(currentID);
       }
     }
-    for (const id of this.options.candidateIDs ?? []) {
+    for (const id of this.includedIDs) {
       if (this.scope.get(this.target, id)) ids.add(id);
     }
     return [...ids].map((id) => new RuntimeConnection(this.scope, this.target, id));
@@ -501,6 +612,18 @@ class RuntimeFamily {
   removeNodes(ids: readonly string[]): void {
     this.scope.check(true);
     for (const connection of this.variants()) connection.removeNodes(ids);
+  }
+  filter(predicate: NodePredicate): this {
+    this.scope.check(true);
+    const updates = this.variants().map((connection) => connection.prepareFilter(predicate));
+    for (const update of updates) update();
+    return this;
+  }
+  sort(compare: NodeComparator): this {
+    this.scope.check(true);
+    const updates = this.variants().map((connection) => connection.prepareSort(compare));
+    for (const update of updates) update();
+    return this;
   }
 }
 

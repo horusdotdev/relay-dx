@@ -16,6 +16,8 @@ export function checkStoreTypes(environment: Environment): void {
     user.name = "No";
     // @ts-expect-error Environment reads do not expose creation.
     view.create("User", "new");
+    // @ts-expect-error Deletion, including pruning, requires an updater.
+    view.delete("Post", "post", { prune: true });
     // @ts-expect-error Schema field names are checked.
     user.naem.get();
     user.friend.get()?.name.get();
@@ -31,8 +33,20 @@ export function checkStoreTypes(environment: Environment): void {
     user.name.connections();
     // @ts-expect-error Outside-updater connection access has no removal method.
     user.posts.connections().removeNodes(["id"]);
+    const connection = user.posts.connection("StoreFixture_posts");
+    connection?.nodes().map((node) => node.title.get());
+    // @ts-expect-error Sorting cached edges requires an updater.
+    connection?.sort((a, b) => a.title.require().localeCompare(b.title.require()));
+    // @ts-expect-error Filtering cached edges requires an updater.
+    user.posts.connections("StoreFixture_posts").filter(() => true);
+    // @ts-expect-error Nodes read outside an updater cannot be written.
+    connection?.nodes()[0]?.title.set("No");
     // @ts-expect-error Refinements must be possible concrete types.
     view.get("Node", "id")!.$.as("PageInfo");
+    // @ts-expect-error Refinement accepts concrete members, not an implemented interface.
+    view.get("Post", "id")!.$.as("Node");
+    // @ts-expect-error A concrete Post cannot be refined to User.
+    view.get("Post", "id")!.$.as("User");
   });
   // @ts-expect-error Async callbacks can outlive their access scope.
   void store.read(environment, async () => {});
@@ -41,6 +55,12 @@ export function checkStoreTypes(environment: Environment): void {
   store.updater(environment, (view) => {
     const user = view.get("User", "id")!;
     const post = view.create("Post", "post");
+    view.delete("Post", "other-post", { prune: true });
+    view.delete("Node", "other-node", { prune: false });
+    // @ts-expect-error Pruning is a boolean option.
+    view.delete("Post", "other-post", { prune: "true" });
+    // @ts-expect-error The delete option is named prune.
+    view.delete("Post", "other-post", { cleanup: true });
     user.name.set("Yes");
     user.friend.set(user);
     post.author.set(user);
@@ -66,16 +86,61 @@ export function checkStoreTypes(environment: Environment): void {
     view.connections("Group", "items", {});
     // @ts-expect-error Ordinary links are not connections.
     user.friend.connections();
-    const connection = user.posts.connections().get("Key_posts")!;
+    const connection = user.posts.connections().get("StoreFixture_posts")!;
     connection.insertEdgeAfter(connection.createEdge(post));
     // @ts-expect-error Filter values are typed from schema arguments.
-    user.posts.connections().get("Key_posts", { filter: { status: "NOT_A_STATUS" } });
+    user.posts.connections().get("StoreFixture_posts", { filter: { status: "NOT_A_STATUS" } });
     // @ts-expect-error Pagination arguments do not identify connection variants.
-    user.posts.connections().get("Key_posts", { first: 5 });
+    user.posts.connections().get("StoreFixture_posts", { first: 5 });
     // @ts-expect-error Connection node types are checked.
     connection.createEdge(user);
     // @ts-expect-error Connection edge types are checked.
     connection.insertEdgeAfter(user);
+    const posts = user.posts.connections("StoreFixture_posts");
+    const keys: readonly (
+      | "StoreFixture_posts"
+      | "ConnectionKeysFixture_other"
+      | "ConnectionKeysFixture_posts"
+    )[] = user.posts.keys();
+    for (const key of keys) user.posts.connections(key).removeNodes([]);
+    // @ts-expect-error Keys belong to their schema field, not another connection on the same type.
+    user.posts.connections("StoreFixture_archivedPosts");
+    // @ts-expect-error Misspelled connection keys are rejected.
+    user.posts.connection("StoreFixture_post");
+    // @ts-expect-error Family lookup uses the same generated key union.
+    posts.get("StoreFixture_archivedPosts");
+    // @ts-expect-error All-parent selection also checks keys against the selected field.
+    view.connections("User", "posts", { parents: "all", key: "StoreFixture_archivedPosts" });
+    // @ts-expect-error Generated key collections are read-only.
+    user.posts.keys().push("StoreFixture_posts");
+    const abstract = view.get("HasPosts", "id")!;
+    for (const key of abstract.posts.keys()) abstract.posts.connections(key);
+    // @ts-expect-error Connection selections accept a key string, not the old options object.
+    user.posts.connections({ keys: ["StoreFixture_posts"] });
+    // @ts-expect-error New connections are included with typed records, not candidate IDs.
+    user.posts.connections({ candidateIDs: ["client:posts"] });
+    // @ts-expect-error All-parent selection no longer accepts the old keys option.
+    view.connections("User", "posts", { parents: "all", keys: ["StoreFixture_posts"] });
+    posts
+      .filter((node, edge) => node.title.get() === edge.cursor.get())
+      .sort((a, b) => a.title.require().localeCompare(b.title.require()));
+    posts.include(view.create("PostConnection", "client:posts"));
+    // @ts-expect-error Include accepts connection records, not node IDs.
+    posts.include("client:posts");
+    // @ts-expect-error Include checks the connection record type.
+    posts.include(user);
+    // @ts-expect-error Filter callbacks return booleans.
+    posts.filter((node) => node.title.get());
+    // @ts-expect-error Sort callbacks return numbers.
+    posts.sort((a, b) => a.title.get() === b.title.get());
+    // @ts-expect-error Callbacks cannot escape the synchronous scope.
+    posts.filter(async () => true);
+    // @ts-expect-error Connection callbacks expose Post fields.
+    posts.filter((node) => node.email.get() !== null);
+    // @ts-expect-error Direct connection filters are checked from schema arguments.
+    user.posts.connection("StoreFixture_posts", { filter: { status: "INVALID" } });
+    // @ts-expect-error Pagination arguments do not identify connection variants.
+    user.posts.connection("StoreFixture_posts", { first: 10 });
   });
   kitchenStore.updater(environment, (view) => {
     const user = view.get("User", "id")!;
@@ -92,5 +157,18 @@ export function checkStoreTypes(environment: Environment): void {
     view.create("ClientDashboard", "model");
     // @ts-expect-error Internal fields are excluded.
     user.__id.get();
+    const result = view.get("SearchResult", "id")!;
+    result.$.as("User")?.name.get();
+    result.$.as("Post")?.title.get();
+    // @ts-expect-error Unions expose fields through their concrete members.
+    result.title.get();
+    // @ts-expect-error Union refinement is restricted to its two concrete members.
+    result.$.as("PageInfo");
+    // @ts-expect-error Union refinement does not offer interface views.
+    result.$.as("Node");
+    view
+      .getRoot()
+      .search.connections("KitchenSinkQuery_search")
+      .filter((node) => node.$.as("Post")?.status.get() === "PUBLISHED");
   });
 }

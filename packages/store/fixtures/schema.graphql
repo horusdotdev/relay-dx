@@ -15,7 +15,10 @@ input NestedFilter {
 interface Node {
   id: ID!
 }
-type User implements Node {
+interface HasPosts {
+  posts(filter: Filter, first: Int, after: String): PostConnection!
+}
+type User implements Node & HasPosts {
   getType: String
   getDataID: String
   as: String
@@ -62,5 +65,6 @@ type Query {
   viewer: User!
   group(id: ID!): Group
   node(id: ID!): Node
+  recentNodes(limit: Int): [Node]
   count(input: Filter!, scale: Int! = 2, label: String): Int!
 }

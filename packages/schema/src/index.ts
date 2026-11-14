@@ -35,7 +35,12 @@ export interface RelaySchemaResult {
   schemaExtensionPaths: string[];
   compiler: RelayCompilerInfo;
   diagnostics: RelaySchemaDiagnostic[];
+  /** @connection keys grouped by schema parent type and field, including base projects. */
+  connectionKeys: RelayConnectionKeys;
 }
+export type RelayConnectionKeys = Readonly<
+  Record<string, Readonly<Record<string, readonly string[]>>>
+>;
 export class RelaySchemaError extends Error {
   readonly diagnostics: RelaySchemaDiagnostic[];
   constructor(message: string, diagnostics: RelaySchemaDiagnostic[] = []) {
@@ -195,6 +200,7 @@ async function invokeNative(
   sdl: string;
   compiler_version: string;
   descriptions: Record<string, string>;
+  connection_keys: RelayConnectionKeys;
 }> {
   const args = ["--config", configPath];
   if (project) args.push("--project", project);
@@ -204,14 +210,18 @@ async function invokeNative(
       windowsHide: true,
       timeout: 60_000,
     });
-    return JSON.parse(result.stdout) as {
+    const output = JSON.parse(result.stdout) as {
       project_name: string;
       config_path: string;
       root_directory: string;
       sdl: string;
       compiler_version: string;
       descriptions: Record<string, string>;
+      connection_keys: RelayConnectionKeys;
     };
+    if (!output.connection_keys)
+      throw new Error("The native helper does not provide connection keys; update or rebuild it.");
+    return output;
   } catch (error) {
     const stderr =
       error && typeof error === "object" && "stderr" in error
@@ -373,6 +383,7 @@ export async function loadRelaySchema(
       schemaExtensionPaths,
       native: true,
       compilerVersion: native.compiler_version,
+      connectionKeys: native.connection_keys,
     },
   };
   return {
@@ -385,5 +396,6 @@ export async function loadRelaySchema(
     schemaExtensionPaths,
     compiler: { path: helper, version: native.compiler_version, available: true },
     diagnostics,
+    connectionKeys: native.connection_keys,
   };
 }

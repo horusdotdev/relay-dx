@@ -27,7 +27,8 @@
     "graphql": "^16.14.2",
     "relay-compiler": "21.0.1",
     "relay-runtime": "21.0.1",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
+    "typescript6": "npm:@typescript/typescript6@6.0.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
     "vite-plus": "0.3.3",
     "zod": "^4.6.5"

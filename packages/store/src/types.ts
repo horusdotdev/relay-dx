@@ -12,12 +12,14 @@ export interface LinkedField<
   Nullable extends boolean = boolean,
   ItemNullable extends boolean = boolean,
   Args = object,
+  Keys extends string = string,
 > {
   readonly target: Target;
   readonly plural: Plural;
   readonly nullable: Nullable;
   readonly itemNullable: ItemNullable;
   readonly args: Args;
+  readonly keys: Keys;
 }
 export interface TypeShape {
   readonly possibleTypes: string;
@@ -56,6 +58,7 @@ type ConnectionTarget<
 type Filters<F extends { args: unknown }> = Partial<
   Omit<F["args"], "first" | "after" | "last" | "before">
 >;
+type FieldKeys<F extends LinkedField> = F["keys"];
 type Edge<S extends StoreTypes, C extends Name<S>> = S[C]["connection"] extends { edge: infer E }
   ? Extract<E, Name<S>>
   : never;
@@ -112,9 +115,23 @@ type LinkedAccessors<
       ? S[Target<S, Fields[K]>]["connection"] extends null
         ? {}
         : {
+            /** All cached filter variants of this field's @connection key. */
             connections(
-              options?: ConnectionScan,
-            ): ConnectionFamily<S, Target<S, Fields[K]>, W, Filters<Fields[K]>>;
+              key?: FieldKeys<Fields[K]>,
+            ): ConnectionFamily<
+              S,
+              Target<S, Fields[K]>,
+              W,
+              Filters<Fields[K]>,
+              FieldKeys<Fields[K]>
+            >;
+            /** All @connection keys declared for this schema field in the selected project. */
+            keys(): readonly FieldKeys<Fields[K]>[];
+            /** One cached variant, identified by @connection key and non-pagination filters. */
+            connection(
+              key: FieldKeys<Fields[K]>,
+              filters?: Filters<Fields[K]>,
+            ): TypedConnection<S, Target<S, Fields[K]>, W> | undefined;
           }
       : {});
 };
@@ -137,20 +154,33 @@ export type TypedRecord<
     };
   };
 
-export interface ConnectionScan {
-  /** Operation connection keys, required when fields share a connection type. */
-  readonly keys?: readonly string[];
-  /** Explicit candidates for connections absent from the published source. */
-  readonly candidateIDs?: readonly string[];
-}
+type ConnectionNode<S extends StoreTypes, C extends Name<S>, W extends boolean> = TypedRecord<
+  S,
+  Node<S, C>,
+  W
+>;
+type ConnectionPredicate<S extends StoreTypes, C extends Name<S>, W extends boolean> = (
+  node: ConnectionNode<S, C, W>,
+  edge: TypedRecord<S, Edge<S, C>, W>,
+) => boolean;
+type ConnectionComparator<S extends StoreTypes, C extends Name<S>, W extends boolean> = (
+  a: ConnectionNode<S, C, W>,
+  b: ConnectionNode<S, C, W>,
+) => number;
 export type TypedConnection<S extends StoreTypes, C extends Name<S>, W extends boolean> = {
   readonly record: TypedRecord<S, C, W>;
+  /** Cached nodes in edge order; skips missing edges and nodes. */
+  nodes(): ReadonlyArray<ConnectionNode<S, C, W>>;
 } & (W extends true
   ? {
       createEdge(node: LinkedRecordInput<S, Node<S, C>>): TypedRecord<S, Edge<S, C>, true>;
       insertEdgeAfter(edge: TypedRecord<S, Edge<S, C>, true>, cursor?: string | null): void;
       insertEdgeBefore(edge: TypedRecord<S, Edge<S, C>, true>, cursor?: string | null): void;
       removeNodes(nodeIDs: readonly string[]): void;
+      /** Keep matching cached edges. Missing nodes and metadata are preserved. */
+      filter(predicate: ConnectionPredicate<S, C, W>): TypedConnection<S, C, W>;
+      /** Stable sort of cached edges. Missing nodes keep their positions. */
+      sort(compare: ConnectionComparator<S, C, W>): TypedConnection<S, C, W>;
     }
   : {});
 export type ConnectionFamily<
@@ -158,26 +188,44 @@ export type ConnectionFamily<
   C extends Name<S>,
   W extends boolean,
   F = Variables,
+  Key extends string = string,
 > = {
   variants(): ReadonlyArray<TypedConnection<S, C, W>>;
-  /** Key/filter correctness is supplied by the caller, not inferred from SDL. */
-  get(key: string, filters?: F): TypedConnection<S, C, W> | undefined;
-} & (W extends true ? { removeNodes(nodeIDs: readonly string[]): void } : {});
+  /** Include a typed connection record created or linked in the current updater. */
+  include(...records: readonly TypedRecord<S, C, W>[]): ConnectionFamily<S, C, W, F, Key>;
+  get(key: Key, filters?: F): TypedConnection<S, C, W> | undefined;
+} & (W extends true
+  ? {
+      removeNodes(nodeIDs: readonly string[]): void;
+      filter(predicate: ConnectionPredicate<S, C, W>): ConnectionFamily<S, C, W, F, Key>;
+      sort(compare: ConnectionComparator<S, C, W>): ConnectionFamily<S, C, W, F, Key>;
+    }
+  : {});
 type Concrete<S extends StoreTypes> = {
   [T in Name<S>]: S[T]["concrete"] extends true ? T : never;
 }[Name<S>];
+export interface DeleteOptions {
+  /** Remove matching connection edges and linked-list entries before deleting the record. */
+  readonly prune?: boolean;
+}
 export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends boolean> = {
   get<T extends Name<S>>(type: T, id: string): TypedRecord<S, T, W> | undefined;
   getRoot(): TypedRecord<S, Query, W>;
   connections<T extends Name<S>, K extends ConnectionKey<S, T>>(
     type: T,
     field: K,
-    options: ConnectionScan & { parents: "all" },
-  ): ConnectionFamily<S, ConnectionTarget<S, T, K>, W, Filters<S[T]["links"][K]>>;
+    options: { parents: "all"; key?: FieldKeys<S[T]["links"][K]> },
+  ): ConnectionFamily<
+    S,
+    ConnectionTarget<S, T, K>,
+    W,
+    Filters<S[T]["links"][K]>,
+    FieldKeys<S[T]["links"][K]>
+  >;
 } & (W extends true
   ? {
       create<T extends Concrete<S>>(type: T, id: string): TypedRecord<S, T, true>;
-      delete<T extends Name<S>>(type: T, id: string): void;
+      delete<T extends Name<S>>(type: T, id: string, options?: DeleteOptions): void;
     }
   : {});
 type Sync<R> = R extends PromiseLike<unknown> ? never : R;
@@ -210,6 +258,7 @@ export interface FieldDefinition {
   readonly type: TypeReference;
   readonly args: Readonly<Record<string, { required: boolean }>>;
   readonly writable: boolean;
+  readonly connectionKeys?: readonly string[];
 }
 export interface TypeDefinition {
   readonly concrete: boolean;

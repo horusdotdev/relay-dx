@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSchema } from "graphql";
 import { describe, expect, it } from "vite-plus/test";
@@ -6,6 +8,62 @@ import { loadRelaySchema } from "@relay-dx/schema";
 import { generateStore } from "./generate.js";
 
 describe("schema-generated record types", () => {
+  it("includes base-project keys without leaking keys from other projects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "relay-connection-keys-"));
+    try {
+      await writeFile(
+        join(directory, "schema.graphql"),
+        "type Query { viewer: User } type User { posts(first: Int): PostConnection! } type PostConnection { edges: [PostEdge!]!, pageInfo: PageInfo! } type PostEdge { node: Post, cursor: String } type Post { id: ID! } type PageInfo { endCursor: String }",
+      );
+      for (const [name, prefix] of [
+        ["base", "Base"],
+        ["app", "App"],
+        ["other", "Other"],
+      ]) {
+        await mkdir(join(directory, name));
+        await writeFile(
+          join(directory, name, `${prefix}.ts`),
+          `const fragment = graphql\`fragment ${prefix}_user on User { posts(first: 5) @connection(key: "${prefix}_posts") { edges { node { id } } } }\`;`,
+        );
+      }
+      const configPath = join(directory, "relay.config.json");
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          root: ".",
+          sources: { base: "base", app: "app", other: "other" },
+          projects: {
+            base: { schema: "schema.graphql", language: "typescript" },
+            app: { base: "base", schema: "schema.graphql", language: "typescript" },
+            other: { schema: "schema.graphql", language: "typescript" },
+          },
+        }),
+      );
+      const app = await loadRelaySchema({ configPath, project: "app" });
+      expect(app.connectionKeys).toEqual({ User: { posts: ["App_posts", "Base_posts"] } });
+      const base = await loadRelaySchema({ configPath, project: "base" });
+      expect(base.connectionKeys).toEqual({ User: { posts: ["Base_posts"] } });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it("extracts source keys by schema field, retaining aliases and interface declarations", async () => {
+    const loaded = await loadRelaySchema({
+      configPath: fileURLToPath(new URL("../fixtures/relay.config.json", import.meta.url)),
+    });
+    expect(loaded.connectionKeys).toEqual({
+      Group: { items: ["StoreFixture_feed"] },
+      HasPosts: { posts: ["ConnectionKeysFixture_posts"] },
+      User: {
+        posts: ["ConnectionKeysFixture_other", "StoreFixture_posts"],
+        archivedPosts: ["StoreFixture_archivedPosts"],
+      },
+    });
+    const source = generateStore(loaded.schema);
+    expect(source).toContain(
+      '"ConnectionKeysFixture_other" | "ConnectionKeysFixture_posts" | "StoreFixture_posts"',
+    );
+  });
   it("reproduces the fixture artifact deterministically", async () => {
     const schema = await loadRelaySchema({
       configPath: fileURLToPath(new URL("../fixtures/relay.config.json", import.meta.url)),

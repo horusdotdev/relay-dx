@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+// TypeScript 7's native compiler has no legacy language-service API.
+import ts from "typescript6";
 import { buildSchema } from "graphql";
 import { afterAll, describe, expect, it } from "vite-plus/test";
 import { generateStore } from "./generate.js";

@@ -17,7 +17,6 @@ export function removePostsForUser(
 ): void {
   environment.commitUpdate(
     store.updater(environment, (view) => {
-      // Every published filtered variant and connection key on this user.
       view.get("User", userID)?.posts.connections().removeNodes(postIDs);
     }),
   );
@@ -26,6 +25,17 @@ export function removePostsForAllUsers(environment: Environment, postIDs: readon
   environment.commitUpdate(
     store.updater(environment, (view) => {
       view.connections("User", "posts", { parents: "all" }).removeNodes(postIDs);
+    }),
+  );
+}
+export function filterAndSortPosts(environment: Environment, userID: string, search: string): void {
+  environment.commitUpdate(
+    store.updater(environment, (view) => {
+      view
+        .get("User", userID)
+        ?.posts.connections()
+        .filter((post) => post.title.get()?.includes(search) === true)
+        .sort((a, b) => (a.title.get() ?? "").localeCompare(b.title.get() ?? ""));
     }),
   );
 }

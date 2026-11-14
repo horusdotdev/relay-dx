@@ -18,6 +18,8 @@ use schema::{ArgumentDefinitions, SDLSchema, Schema};
 use schema_print::print;
 use serde::Serialize;
 
+mod connections;
+
 #[derive(Debug)]
 struct Args {
     config: PathBuf,
@@ -31,6 +33,7 @@ struct Output {
     root_directory: String,
     sdl: String,
     descriptions: BTreeMap<String, String>,
+    connection_keys: connections::ConnectionKeys,
     compiler_version: &'static str,
 }
 
@@ -599,6 +602,7 @@ fn run(args: Args) -> Result<Output, String> {
         root_directory,
         sdl: print(&schema),
         descriptions,
+        connection_keys: connections::collect(&schema, &config, project, &graphql_asts)?,
         compiler_version: "21.0.1",
     })
 }

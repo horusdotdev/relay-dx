@@ -21,7 +21,7 @@ export const KitchenSinkQuery = graphql`
         headline
         imageUrl
       }
-      posts(first: $first, after: $after) {
+      posts(first: $first, after: $after) @connection(key: "KitchenSinkQuery_posts") {
         edges {
           cursor
           node {
@@ -52,7 +52,8 @@ export const KitchenSinkQuery = graphql`
         title
       }
     }
-    search(filter: $filter, first: $first, after: $after) {
+    search(filter: $filter, first: $first, after: $after)
+      @connection(key: "KitchenSinkQuery_search") {
       edges {
         cursor
         node {

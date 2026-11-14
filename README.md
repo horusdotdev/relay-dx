@@ -1,7 +1,6 @@
 # Relay DX
 
-Schema tools and typed store access for Relay: server SDL, client extensions and
-Relay Resolvers together. ESM packages with TypeScript declarations.
+Typed store access and schema tools for Relay.
 
 | Package                                       | Purpose                               | Command        |
 | --------------------------------------------- | ------------------------------------- | -------------- |
@@ -9,12 +8,6 @@ Relay Resolvers together. ESM packages with TypeScript declarations.
 | [@relay-dx/cli](packages/cli/README.md)       | Export effective SDL                  | `relay-schema` |
 | [@relay-dx/mcp](packages/mcp/README.md)       | Explore schemas through MCP           | `relay-mcp`    |
 | [@relay-dx/schema](packages/schema/README.md) | Load a `GraphQLSchema` and SDL        | —              |
-
-## Requirements
-
-Requires **Node.js 22.18+** and **Relay 21.0.1**. Config must be JSON, including a
-`relay` object in `package.json`. Release helpers support macOS/Linux arm64/x64
-and Windows x64; Linux needs glibc 2.35+ and OpenSSL 3. No Rust or Watchman needed.
 
 ## Typed store
 
@@ -38,8 +31,9 @@ environment.commitUpdate(
 ```
 
 Fields expose `get`, `require` and updater-only `set`, with schema documentation
-and deprecation markers. Record operations live under `$`. Reads may be null or
-missing; callbacks are synchronous and handles expire afterward.
+and deprecation markers. Connection helpers can remove, filter or sort cached
+edges using typed node data. Reads may be null or missing; handles last for the
+synchronous callback.
 [Store reference →](packages/store/README.md)
 
 Relay's low-level record methods accept field names as strings. After refreshing
@@ -96,7 +90,10 @@ validation and artifacts. [Library reference →](packages/schema/README.md)
 
 ## Development
 
-Source builds need Node.js 24.18+, [Vite+](https://viteplus.dev/guide/) and stable Rust.
+Packages require Node.js 22.18+, Relay 21.0.1 and JSON Relay config. Native helpers
+support macOS/Linux arm64/x64 and Windows x64; Linux needs glibc 2.35+ and OpenSSL 3.
+
+Source builds use TypeScript 7, Node.js 24.18+, [Vite+](https://viteplus.dev/guide/) and stable Rust.
 Build before tests to generate fixtures and executables.
 
 ```sh
