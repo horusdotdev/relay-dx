@@ -18,6 +18,7 @@ import type {
   TypeReference,
 } from "./types.js";
 import { pruneCollections } from "./prune.js";
+import { linkedID, listIDs, updaterRecords } from "./updater.js";
 export type * from "./types.js";
 
 // @types/relay-runtime 20 declares this runtime namespace as a class instance.
@@ -317,6 +318,23 @@ class RuntimeRecord {
     this.scope.check();
     return new RuntimeFamily(this.scope, this.type, field, this.id, key);
   }
+  insertListRecord(
+    record: RuntimeRecord,
+    name: string,
+    args: Variables | undefined,
+    prepend: boolean,
+  ): void {
+    this.scope.check(true);
+    const field = this.field(name, "link", args, true);
+    this.scope.lookup(named(field.type), record.id);
+    this.scope.native(record);
+    const mutator = updaterRecords(this.scope.raw!);
+    const current = required(mutator.unstable_getRawRecordWithChanges(this.id), this.id);
+    const key = storageKey(name, args);
+    const ids = listIDs(current, key);
+    if (ids.includes(record.id)) return;
+    mutator.setLinkedRecordIDs(this.id, key, prepend ? [record.id, ...ids] : [...ids, record.id]);
+  }
   view(): RecordView {
     // Public field names never share an object with backend methods or state.
     const view: Record<string, unknown> = Object.create(null);
@@ -375,6 +393,12 @@ class RuntimeRecord {
             args,
           );
       };
+      if (field.kind === "link" && field.type.element) {
+        accessor.append = (record: RecordView, args?: Variables) =>
+          this.insertListRecord(this.scope.state(record), name, args, false);
+        accessor.prepend = (record: RecordView, args?: Variables) =>
+          this.insertListRecord(this.scope.state(record), name, args, true);
+      }
     }
     if (
       field.kind === "link" &&
@@ -486,6 +510,36 @@ class RuntimeConnection {
       shape.edge,
     );
     return required(this.scope.get(shape.edge, edge.getDataID()), "created edge");
+  }
+  insertNode(node: RecordView, prepend: boolean): void {
+    this.scope.check(true);
+    const state = this.scope.state(node);
+    const shape = required(this.scope.type(this.type).connection, this.type);
+    this.scope.lookup(shape.node, state.id);
+    this.scope.native(state);
+    const connection = this.scope.state(this.record);
+    const mutator = updaterRecords(this.scope.raw!);
+    const current = required(
+      mutator.unstable_getRawRecordWithChanges(connection.id),
+      connection.id,
+    );
+    const ids = listIDs(current, "edges");
+    if (
+      ids.some(
+        (id) =>
+          id != null && linkedID(mutator.unstable_getRawRecordWithChanges(id)?.node) === state.id,
+      )
+    )
+      return;
+    const edge = this.createEdge(node);
+    const id = this.scope.state(edge).id;
+    mutator.setLinkedRecordIDs(connection.id, "edges", prepend ? [id, ...ids] : [...ids, id]);
+  }
+  appendNode(node: RecordView): void {
+    this.insertNode(node, false);
+  }
+  prependNode(node: RecordView): void {
+    this.insertNode(node, true);
   }
   insertEdgeAfter(edge: RecordView, cursor?: string | null): void {
     const state = this.scope.state(edge);
@@ -613,6 +667,14 @@ class RuntimeFamily {
     this.scope.check(true);
     for (const connection of this.variants()) connection.removeNodes(ids);
   }
+  appendNode(node: RecordView): void {
+    this.scope.check(true);
+    for (const connection of this.variants()) connection.appendNode(node);
+  }
+  prependNode(node: RecordView): void {
+    this.scope.check(true);
+    for (const connection of this.variants()) connection.prependNode(node);
+  }
   filter(predicate: NodePredicate): this {
     this.scope.check(true);
     const updates = this.variants().map((connection) => connection.prepareFilter(predicate));
@@ -648,6 +710,11 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
   }
   // One audited bridge between generated phantom types and checked runtime views.
   return {
+    clientID: (type: string) => {
+      if (!definition.types[type]?.concrete)
+        throw new Error(`Client IDs require a concrete schema type: ${type}.`);
+      return `client:${type}:${globalThis.crypto.randomUUID()}`;
+    },
     read: (environment: Environment, callback: (view: unknown) => unknown) =>
       run(environment, undefined, callback),
     withUpdater: (

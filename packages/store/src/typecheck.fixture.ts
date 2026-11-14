@@ -3,6 +3,12 @@ import type { Environment } from "relay-runtime";
 import { store } from "../fixtures/__generated__/store.js";
 import { store as kitchenStore } from "../examples/__generated__/store.js";
 export function checkStoreTypes(environment: Environment): void {
+  const clientID: `client:Post:${string}` = store.clientID("Post");
+  void clientID;
+  // @ts-expect-error Client IDs must name a concrete generated type.
+  store.clientID("Node");
+  // @ts-expect-error Unknown types cannot be used for client IDs.
+  store.clientID("Missing");
   store.read(environment, (view) => {
     const user = view.get("User", "id")!;
     const name: string | null | undefined = user.name.get();
@@ -18,6 +24,8 @@ export function checkStoreTypes(environment: Environment): void {
     view.create("User", "new");
     // @ts-expect-error Deletion, including pruning, requires an updater.
     view.delete("Post", "post", { prune: true });
+    // @ts-expect-error List insertion requires an updater.
+    user.friends.append(user);
     // @ts-expect-error Schema field names are checked.
     user.naem.get();
     user.friend.get()?.name.get();
@@ -37,6 +45,8 @@ export function checkStoreTypes(environment: Environment): void {
     connection?.nodes().map((node) => node.title.get());
     // @ts-expect-error Sorting cached edges requires an updater.
     connection?.sort((a, b) => a.title.require().localeCompare(b.title.require()));
+    // @ts-expect-error Connection node insertion requires an updater.
+    connection?.appendNode(view.get("Post", "id")!);
     // @ts-expect-error Filtering cached edges requires an updater.
     user.posts.connections("StoreFixture_posts").filter(() => true);
     // @ts-expect-error Nodes read outside an updater cannot be written.
@@ -55,6 +65,20 @@ export function checkStoreTypes(environment: Environment): void {
   store.updater(environment, (view) => {
     const user = view.get("User", "id")!;
     const post = view.create("Post", "post");
+    user.friends.append(user);
+    user.friends.prepend(user);
+    view.getRoot().recentNodes.append(post, { limit: 5 });
+    view.getRoot().requiredNodes.prepend(post, { input: { status: "DRAFT" } });
+    // @ts-expect-error List insertions check record types.
+    user.friends.append(post);
+    // @ts-expect-error Required list arguments must be provided.
+    view.getRoot().requiredNodes.append(post);
+    // @ts-expect-error List arguments retain their schema types.
+    view.getRoot().recentNodes.append(post, { limit: "five" });
+    // @ts-expect-error Scalar lists do not accept linked record operations.
+    user.tags.append(user);
+    // @ts-expect-error Singular links do not accept list operations.
+    user.friend.append(user);
     view.delete("Post", "other-post", { prune: true });
     view.delete("Node", "other-node", { prune: false });
     // @ts-expect-error Pruning is a boolean option.
@@ -88,6 +112,10 @@ export function checkStoreTypes(environment: Environment): void {
     user.friend.connections();
     const connection = user.posts.connections().get("StoreFixture_posts")!;
     connection.insertEdgeAfter(connection.createEdge(post));
+    connection.appendNode(post);
+    connection.prependNode(post);
+    // @ts-expect-error Node insertion checks connection node types.
+    connection.prependNode(user);
     // @ts-expect-error Filter values are typed from schema arguments.
     user.posts.connections().get("StoreFixture_posts", { filter: { status: "NOT_A_STATUS" } });
     // @ts-expect-error Pagination arguments do not identify connection variants.
@@ -97,6 +125,10 @@ export function checkStoreTypes(environment: Environment): void {
     // @ts-expect-error Connection edge types are checked.
     connection.insertEdgeAfter(user);
     const posts = user.posts.connections("StoreFixture_posts");
+    posts.appendNode(post);
+    posts.prependNode(post);
+    // @ts-expect-error Family insertion checks connection node types.
+    posts.appendNode(user);
     const keys: readonly (
       | "StoreFixture_posts"
       | "ConnectionKeysFixture_other"

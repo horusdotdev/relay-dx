@@ -1,41 +1,12 @@
 import type { RecordSourceProxy } from "relay-runtime";
 import type { SchemaDefinition } from "./types.js";
-
-type StoredRecord = Readonly<Record<string, unknown>>;
-type LinkedIDs = readonly (string | null | undefined)[];
-
-/** Relay 21 adapter: public updater APIs cannot enumerate unpublished records or fields. */
-interface UpdaterRecords {
-  readonly __sources: readonly { getRecordIDs(): string[] }[];
-  unstable_getRawRecordWithChanges(id: string): StoredRecord | null | undefined;
-  setLinkedRecordIDs(id: string, key: string, ids: LinkedIDs): void;
-}
-
-function updaterRecords(raw: RecordSourceProxy): UpdaterRecords {
-  const mutator = (raw as unknown as { __mutator?: UpdaterRecords }).__mutator;
-  if (
-    !mutator ||
-    !Array.isArray(mutator.__sources) ||
-    mutator.__sources.some((source) => typeof source.getRecordIDs !== "function") ||
-    typeof mutator.unstable_getRawRecordWithChanges !== "function" ||
-    typeof mutator.setLinkedRecordIDs !== "function"
-  ) {
-    throw new Error("Pruning requires the Relay 21.0.1 updater implementation.");
-  }
-  return mutator;
-}
-
-function linkedIDs(value: unknown): LinkedIDs | undefined {
-  if (value === null || typeof value !== "object" || !("__refs" in value)) return undefined;
-  const ids = value.__refs;
-  return Array.isArray(ids) && ids.every((id) => id == null || typeof id === "string")
-    ? ids
-    : undefined;
-}
-
-function pointsTo(value: unknown, id: string): boolean {
-  return value !== null && typeof value === "object" && "__ref" in value && value.__ref === id;
-}
+import {
+  linkedID,
+  linkedIDs,
+  updaterRecords,
+  type LinkedIDs,
+  type StoredRecord,
+} from "./updater.js";
 
 /** Prune membership through Relay's mutation sink, preserving optimistic rollback. */
 export function pruneCollections(
@@ -68,7 +39,7 @@ export function pruneCollections(
       const edges = Boolean(definition?.connection && name === "edges");
       const next = links.filter((link) => {
         if (link === id) return false;
-        return !edges || link == null || !pointsTo(read(link)?.node, id);
+        return !edges || link == null || linkedID(read(link)?.node) !== id;
       });
       if (next.length !== links.length) updates.push({ parent, key, ids: next });
     }

@@ -42,7 +42,9 @@ environment.commitUpdate(store.updater(environment, view => {
   const user = view.create("User", "consumer-user");
   user.name.set("Ada");
   view.getRoot().viewer.set(user);
-  const first = view.create("Post", "consumer-post-1");
+  const firstID = store.clientID("Post");
+  if (!firstID.startsWith("client:Post:")) throw new Error("Installed client ID helper failed");
+  const first = view.create("Post", firstID);
   const second = view.create("Post", "consumer-post-2");
   first.title.set("Zulu");
   second.title.set("Alpha");
@@ -54,8 +56,13 @@ environment.commitUpdate(store.updater(environment, view => {
   for (const key of keys) user.posts.connections(key);
   const posts = user.posts.connections().include(record);
   const connection = posts.variants()[0]!;
-  connection.insertEdgeAfter(connection.createEdge(first));
-  connection.insertEdgeAfter(connection.createEdge(second));
+  posts.appendNode(first);
+  posts.appendNode(first);
+  connection.prependNode(second);
+  connection.prependNode(second);
+  record.edges.append(connection.createEdge(second));
+  record.edges.prepend(connection.createEdge(second));
+  if (connection.record.edges.require().length !== 2) throw new Error("Installed duplicate-safe insertion failed");
   posts.sort((a, b) => a.title.require().localeCompare(b.title.require()));
   if (connection.nodes()[0]?.title.get() !== "Alpha") throw new Error("Installed connection sort failed");
   posts.filter(post => post.title.get() === "Alpha");

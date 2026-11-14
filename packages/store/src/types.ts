@@ -133,7 +133,22 @@ type LinkedAccessors<
               filters?: Filters<Fields[K]>,
             ): TypedConnection<S, Target<S, Fields[K]>, W> | undefined;
           }
-      : {});
+      : W extends true
+        ? {
+            /** Append once by Relay record ID; leaves existing entries in place. */
+            append(
+              this: void,
+              record: LinkedRecordInput<S, Target<S, Fields[K]>>,
+              ...args: Args<Fields[K]>
+            ): void;
+            /** Prepend once by Relay record ID; leaves existing entries in place. */
+            prepend(
+              this: void,
+              record: LinkedRecordInput<S, Target<S, Fields[K]>>,
+              ...args: Args<Fields[K]>
+            ): void;
+          }
+        : {});
 };
 
 declare const recordType: unique symbol;
@@ -174,6 +189,10 @@ export type TypedConnection<S extends StoreTypes, C extends Name<S>, W extends b
 } & (W extends true
   ? {
       createEdge(node: LinkedRecordInput<S, Node<S, C>>): TypedRecord<S, Edge<S, C>, true>;
+      /** Append once by node ID, preserving existing edges and cursors. */
+      appendNode(node: LinkedRecordInput<S, Node<S, C>>): void;
+      /** Prepend once by node ID, preserving existing edges and cursors. */
+      prependNode(node: LinkedRecordInput<S, Node<S, C>>): void;
       insertEdgeAfter(edge: TypedRecord<S, Edge<S, C>, true>, cursor?: string | null): void;
       insertEdgeBefore(edge: TypedRecord<S, Edge<S, C>, true>, cursor?: string | null): void;
       removeNodes(nodeIDs: readonly string[]): void;
@@ -199,6 +218,8 @@ export type ConnectionFamily<
       removeNodes(nodeIDs: readonly string[]): void;
       filter(predicate: ConnectionPredicate<S, C, W>): ConnectionFamily<S, C, W, F, Key>;
       sort(compare: ConnectionComparator<S, C, W>): ConnectionFamily<S, C, W, F, Key>;
+      appendNode(node: LinkedRecordInput<S, Node<S, C>>): void;
+      prependNode(node: LinkedRecordInput<S, Node<S, C>>): void;
     }
   : {});
 type Concrete<S extends StoreTypes> = {
@@ -230,6 +251,8 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
   : {});
 type Sync<R> = R extends PromiseLike<unknown> ? never : R;
 export interface StoreAPI<S extends StoreTypes, Q extends Name<S>> {
+  /** Generate once before committing, so optimistic replays reuse the same ID. */
+  clientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
   read<R>(
     this: void,
     environment: Environment,

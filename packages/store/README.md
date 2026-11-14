@@ -82,15 +82,16 @@ handles expire afterward. Read-only accessors have no `set` method.
 
 ## Reference
 
-| Access            | Operations                                                                                                                                                                          |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Store             | `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                     |
-| View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id, { prune?: boolean })`                                                                           |
-| Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                                                    |
-| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`                                                                                                                                        |
-| Connection field  | `keys()`, `connections(key?)`, `connection(key, filters?)`                                                                                                                          |
-| Connection family | `variants()`, `include(record)`; updater-only `removeNodes(ids)`, `filter(predicate)`, `sort(compare)`                                                                              |
-| Connection        | `record`, `nodes()`; updater-only `createEdge(node)`, `insertEdgeAfter(edge, cursor?)`, `insertEdgeBefore(edge, cursor?)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)` |
+| Access            | Operations                                                                                                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Store             | `clientID(type)`, `read(environment, callback)`, `updater(environment, callback)`, `withUpdater(environment, rawStore, callback)`                                                                                            |
+| View              | `get(type, id)`, `getRoot()`, updater-only `create(type, id)` and `delete(type, id, { prune?: boolean })`                                                                                                                    |
+| Field             | `get(args?)`, `require(args?)`, updater-only `set(value, args?)`                                                                                                                                                             |
+| Linked list       | Updater-only `append(record, args?)`, `prepend(record, args?)`                                                                                                                                                               |
+| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`                                                                                                                                                                                 |
+| Connection field  | `keys()`, `connections(key?)`, `connection(key, filters?)`                                                                                                                                                                   |
+| Connection family | `variants()`, `include(record)`; updater-only `appendNode(node)`, `prependNode(node)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)`                                                                              |
+| Connection        | `record`, `nodes()`; updater-only `appendNode(node)`, `prependNode(node)`, `createEdge(node)`, `insertEdgeAfter(edge, cursor?)`, `insertEdgeBefore(edge, cursor?)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)` |
 
 `get(type, id)` returns `undefined` for absent/deleted records and throws on a type
 mismatch. `$.as(type)` returns a concrete refinement or `undefined`.
@@ -104,6 +105,23 @@ view.delete("Post", postID, { prune: true });
 `prune` scans the store and current updater changes, removing matching connection
 edges and linked-list entries before deletion. Remaining items keep their order;
 counts, pagination metadata and singular links are unchanged. Omit it for plain deletion.
+
+### Creating and inserting records
+
+```ts
+// Generate once before committing; reuse the ID in optimistic replays.
+const temporaryID = store.clientID("Post"); // client:Post:<uuid>
+
+// Inside an updater:
+const post = view.create("Post", temporaryID);
+post.title.set("New post");
+user.posts.connections().prependNode(post);
+user.friends.append(otherUser);
+```
+
+The insertion helpers skip records already present by Relay ID, preserving their
+position and cursor. Empty, null or missing lists initialize on insertion. Counts
+and pagination metadata stay unchanged. `clientID` uses `crypto.randomUUID()`.
 
 ### Connections
 

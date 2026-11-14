@@ -66,5 +66,6 @@ type Query {
   group(id: ID!): Group
   node(id: ID!): Node
   recentNodes(limit: Int): [Node]
+  requiredNodes(input: Filter!): [Node]
   count(input: Filter!, scale: Int! = 2, label: String): Int!
 }
