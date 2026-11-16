@@ -9,7 +9,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const temporary = await mkdtemp(join(tmpdir(), "relay-store-package-"));
 try {
   const archives = [];
-  for (const name of ["schema", "store"]) {
+  // Install the full package set to catch dependency hoisting differences.
+  for (const name of ["schema", "cli", "mcp", "store"]) {
     const directory = join(root, "packages", name);
     const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
     execFileSync("pnpm", ["--dir", directory, "pack", "--pack-destination", temporary], {
