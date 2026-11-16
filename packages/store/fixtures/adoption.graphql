@@ -1,0 +1,42 @@
+enum Availability {
+  QUEUED
+  READY
+}
+interface Media {
+  id: ID!
+}
+type Recording implements Media {
+  id: ID!
+  title: String!
+  availability: Availability!
+  duration: Int!
+}
+type Episode implements Media {
+  id: ID!
+  title: String!
+}
+type RecordingEdge {
+  cursor: String
+  node: Recording
+}
+type RecordingConnection {
+  edges: [RecordingEdge!]!
+  pageInfo: Pagination!
+  entryCount: Int!
+}
+type Pagination {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+type Studio {
+  id: ID!
+  recordings(first: Int, after: String, genre: String): RecordingConnection!
+  takes(limit: Int!): [Recording!]!
+  label(locale: String!): String!
+}
+type Query {
+  studio(id: ID!): Studio
+  media(id: ID!): Media
+}

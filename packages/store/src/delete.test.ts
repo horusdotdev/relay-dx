@@ -89,7 +89,7 @@ describe("record deletion with collection pruning", () => {
       edge.setLinkedRecord(raw.get("p1")!, "node");
       connection.setLinkedRecords([edge], "edges");
       connection.setValue(7, "totalCount");
-      store.withUpdater(environment, raw, (view) => view.delete("Post", "p1", { prune: true }));
+      store.proxy(environment, raw, (view) => view.delete("Post", "p1", { prune: true }));
       expect(
         fresh.getLinkedRecords("recentNodes", { limit: 5 })?.map((node) => node.getDataID()),
       ).toEqual(["p2"]);

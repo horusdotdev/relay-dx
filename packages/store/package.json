@@ -46,8 +46,7 @@
   },
   "dependencies": {
     "@relay-dx/schema": "workspace:*",
-    "@types/relay-runtime": "^20.1.0",
-    "graphql": "^16.14.2"
+    "graphql": "16.14.2"
   },
   "peerDependencies": {
     "relay-runtime": "21.0.1"

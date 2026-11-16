@@ -48,7 +48,7 @@
     "build:js": "node scripts/build.mjs --js-only"
   },
   "dependencies": {
-    "graphql": "^16.14.2"
+    "graphql": "16.14.2"
   },
   "engines": {
     "node": ">=22.18.0"

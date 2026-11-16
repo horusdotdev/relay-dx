@@ -12,6 +12,9 @@ function run(args, cwd) {
 export function verifyStoreConsumer(directory, configPath) {
   const packageDirectory = join(directory, "node_modules/@relay-dx/store");
   const manifest = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
+  assert.equal(manifest.dependencies["@types/relay-runtime"], undefined);
+  assert.equal(manifest.peerDependencies["relay-runtime"], "21.0.1");
+  assert.equal(manifest.dependencies.graphql, "16.14.2");
   const cli = join(packageDirectory, manifest.bin["relay-store"]);
   const launcher = join(
     directory,
@@ -75,6 +78,21 @@ environment.commitUpdate(store.updater(environment, view => {
 }));
 const name = store.read(environment, view => view.getRoot().viewer.require().name.require());
 if (name !== "Ada") throw new Error("Installed store failed to read its update");
+environment.commitUpdate(store.updater(view => {
+  const recording = view.upsert("Post", { id: "consumer-entry", title: "Coda", status: "DRAFT", author: view.getRoot().viewer.require(), tags: [] });
+  recording.title.set("Coda");
+  recording.status.set("%future added value");
+  recording.$.invalidate();
+  const connection = view.getRoot().viewer.require().posts.createConnection("KitchenSinkQuery_posts");
+  connection.appendNode(recording);
+  if (connection.nodes().length !== 1) throw new Error("Installed connection creation failed");
+}));
+environment.commitUpdate(raw => store.proxy(raw, view => {
+  const recording = view.get("Post", "consumer-entry")!;
+  for (const variant of recording.title.variants()) variant.set("Encore");
+  if (recording.title.get() !== "Encore") throw new Error("Installed field variants failed");
+  view.invalidateStore();
+}));
 function checkTypes() {
   store.updater(environment, view => {
     const user = view.get("User", "consumer-user")!;
