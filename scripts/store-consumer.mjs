@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 function run(args, cwd) {
@@ -14,7 +15,15 @@ export function verifyStoreConsumer(directory, configPath) {
   const manifest = JSON.parse(readFileSync(join(packageDirectory, "package.json"), "utf8"));
   assert.equal(manifest.dependencies["@types/relay-runtime"], undefined);
   assert.equal(manifest.peerDependencies["relay-runtime"], "21.0.1");
-  assert.equal(manifest.dependencies.graphql, "16.14.2");
+  const consumerGraphQL = createRequire(join(directory, "package.json")).resolve("graphql");
+  for (const name of ["schema", "store", "mcp"]) {
+    const packageJSON = join(directory, `node_modules/@relay-dx/${name}/package.json`);
+    if (!statSync(packageJSON, { throwIfNoEntry: false })?.isFile()) continue;
+    const installed = JSON.parse(readFileSync(packageJSON, "utf8"));
+    assert.equal(installed.dependencies?.graphql, undefined);
+    assert.equal(installed.peerDependencies.graphql, "^16.14.2");
+    assert.equal(createRequire(packageJSON).resolve("graphql"), consumerGraphQL);
+  }
   const cli = join(packageDirectory, manifest.bin["relay-store"]);
   const launcher = join(
     directory,

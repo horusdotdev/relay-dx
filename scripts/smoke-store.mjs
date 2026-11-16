@@ -23,18 +23,28 @@ try {
       ),
     );
   }
-  const consumer = join(temporary, "consumer");
-  await mkdir(consumer);
-  await writeFile(
-    join(consumer, "package.json"),
-    JSON.stringify({ name: "store-consumer", private: true, type: "module" }),
-  );
-  execFileSync(
-    "npm",
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", ...archives],
-    { cwd: consumer, stdio: "inherit", timeout: 60_000 },
-  );
-  verifyStoreConsumer(consumer, join(root, "examples/kitchen-sink/relay.config.json"));
+  for (const graphqlVersion of ["16.14.2", "16.15.0"]) {
+    const consumer = join(temporary, `consumer-${graphqlVersion}`);
+    await mkdir(consumer);
+    await writeFile(
+      join(consumer, "package.json"),
+      JSON.stringify({ name: "store-consumer", private: true, type: "module" }),
+    );
+    execFileSync(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--no-package-lock",
+        `graphql@${graphqlVersion}`,
+        ...archives,
+      ],
+      { cwd: consumer, stdio: "inherit", timeout: 60_000 },
+    );
+    verifyStoreConsumer(consumer, join(root, "examples/kitchen-sink/relay.config.json"));
+  }
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

@@ -5,8 +5,11 @@ resolvers. ESM with TypeScript declarations. Requires Node.js 22.18+; the native
 helper is pinned to Relay 21.0.1 and rejects mismatched installed compilers.
 
 ```sh
-npm install @relay-dx/schema
+npm install @relay-dx/schema graphql@^16.14.2
 ```
+
+GraphQL is a peer dependency so the returned schema uses the application's
+GraphQL instance. Supported versions are 16.14.2 and later within GraphQL 16.
 
 ```ts
 import { loadRelaySchema } from "@relay-dx/schema";
