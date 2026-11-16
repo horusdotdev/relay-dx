@@ -1,5 +1,12 @@
 # @relay-dx/cli
 
+## 0.4.0
+
+### Patch Changes
+
+- Updated dependencies [db3eca6]
+  - @relay-dx/schema@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes
