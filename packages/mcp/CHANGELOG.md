@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Share GraphQL through a peer dependency with schema and store to avoid duplicate
+  module instances when installing the packages together.
 - Updated dependencies [db3eca6]
   - @relay-dx/schema@0.4.0
 

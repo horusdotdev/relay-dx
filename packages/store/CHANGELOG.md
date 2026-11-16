@@ -18,8 +18,8 @@
   record union. Preserve strict upsert completeness and caller-managed counts.
 
   Remove the store package's legacy Relay type dependency, relying on Relay 21's
-  first-party declarations. Pin GraphQL consistently in schema and store so
-  installed generation uses one GraphQL implementation.
+  first-party declarations. Share GraphQL through a peer dependency across schema,
+  store and MCP so generation uses the application's GraphQL implementation.
 
 ### Patch Changes
 

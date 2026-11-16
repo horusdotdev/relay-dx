@@ -45,10 +45,13 @@
     "generate:example": "node dist/cli.js --config ../../examples/kitchen-sink/relay.config.json --output examples/__generated__/store.ts"
   },
   "dependencies": {
-    "@relay-dx/schema": "workspace:*",
+    "@relay-dx/schema": "workspace:*"
+  },
+  "devDependencies": {
     "graphql": "16.14.2"
   },
   "peerDependencies": {
+    "graphql": "^16.14.2",
     "relay-runtime": "21.0.1"
   },
   "engines": {

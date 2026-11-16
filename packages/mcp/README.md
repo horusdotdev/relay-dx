@@ -22,6 +22,9 @@ Append `"--project", "web"` for multi-project configs. Or install
 `@relay-dx/mcp` locally and launch `relay-mcp` directly. Avoid task runners that
 write logging to stdout; stdout carries JSON-RPC, stderr carries diagnostics.
 
+GraphQL is a peer dependency (`^16.14.2`), shared with `@relay-dx/schema` and
+the host application. For a local install, include `graphql@^16.14.2`.
+
 ## Tools
 
 | Tool                | Input                                      | Result                                             |

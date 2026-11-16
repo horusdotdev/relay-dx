@@ -5,12 +5,15 @@ Typed Relay store reads, updaters and connection helpers, generated from your sc
 ## Install and generate
 
 ```sh
-npm install @relay-dx/store
+npm install @relay-dx/store graphql@^16.14.2
 npx relay-store -o src/__generated__/store.ts
 ```
 
 Regenerate after schema, resolver or Relay document changes. Continue running
 Relay's compiler for operation artifacts.
+
+GraphQL is a peer dependency shared with schema loading and the MCP package.
+Use the same GraphQL installation when passing schemas to the generator.
 
 ## Catch schema drift
 
