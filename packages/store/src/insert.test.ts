@@ -88,7 +88,7 @@ describe("client IDs and duplicate-safe collection insertion", () => {
       connection.setLinkedRecords([first, null, missing, second], "edges");
       original = [first.getDataID(), null, missing.getDataID(), second.getDataID()];
       raw.delete("missing-edge");
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         const typed = view
           .get("Group", "g1")!
           .items.connection("StoreFixture_feed", { filter: draft })!;
@@ -155,7 +155,7 @@ describe("client IDs and duplicate-safe collection insertion", () => {
       const missing = raw.create("missing-post", "Post");
       raw.getRoot().setLinkedRecords([raw.get("p1")!, null, missing], "recentNodes", { limit: 10 });
       raw.delete("missing-post");
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         view.getRoot().recentNodes.append(view.get("Post", "p2")!, { limit: 10 });
         view.getRoot().recentNodes.append(view.get("Post", "p2")!, { limit: 10 });
       });
@@ -168,9 +168,9 @@ describe("client IDs and duplicate-safe collection insertion", () => {
   it("checks node types, scopes and updater-only access", () => {
     const environment = seed();
     environment.commitUpdate((raw) => {
-      store.withUpdater(environment, raw, (outer) => {
+      store.proxy(environment, raw, (outer) => {
         const foreign = outer.get("Post", "p1")!;
-        store.withUpdater(environment, raw, (view) => {
+        store.proxy(environment, raw, (view) => {
           const connection = view
             .get("Group", "g1")!
             .items.connection("StoreFixture_feed", { filter: draft })!;

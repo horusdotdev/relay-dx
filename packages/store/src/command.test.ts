@@ -109,6 +109,38 @@ describe("relay-store command", () => {
     expect(selected.stdout.join("")).toContain("export const store = createStoreAPI");
   });
 
+  it("warns on stderr for nested record lists and exposes scoped generation flags", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "relay-store-scoped-"));
+    try {
+      await mkdir(join(directory, "src"));
+      await writeFile(
+        join(directory, "src", "CatalogQuery.ts"),
+        "const query = graphql`query CatalogQuery { grid { label } }`;",
+      );
+      await writeFile(
+        join(directory, "schema.graphql"),
+        "type Query { grid: Grid unused: Receipt } type Grid { label: String cells: [[Tile!]]! } type Tile { value: Int! } type Receipt { amount: Int! }",
+      );
+      await writeFile(
+        join(directory, "relay.config.json"),
+        JSON.stringify({ src: "src", schema: "schema.graphql", language: "typescript" }),
+      );
+      const full = capture();
+      expect(await runCli(["--cwd", directory, "--types", "all"], full.io)).toBe(0);
+      expect(full.stderr.join("")).toContain("Skipping unsupported nested linked list: Grid.cells");
+      expect(full.stdout.join("")).not.toContain("Skipping unsupported");
+      expect(full.stdout.join("")).toContain('"Receipt"');
+      for (const scopeArgs of [[], ["--types", "Grid"], ["--types", "selected"]]) {
+        const scoped = capture();
+        expect(await runCli(["--cwd", directory, ...scopeArgs], scoped.io)).toBe(0);
+        expect(scoped.stdout.join("")).toContain('"Grid"');
+        expect(scoped.stdout.join("")).not.toContain('"Receipt"');
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("keeps existing output intact when schema extraction fails", async () => {
     const directory = await mkdtemp(join(tmpdir(), "relay-store-error-"));
     try {

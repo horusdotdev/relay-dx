@@ -72,10 +72,22 @@ export type FieldAccessor<Read, Write, Arguments, Writable extends boolean> = {
   get(this: void, ...args: Args<{ args: Arguments }>): Read;
   /** Requires the outer value; linked-list entries may still be absent. */
   require(this: void, ...args: Args<{ args: Arguments }>): NonNullable<Read>;
+  /** Cached argument variants, including current updater edits. */
+  variants(this: void): ReadonlyArray<FieldVariant<Read, Write, Writable>>;
 } & (Writable extends true
   ? [Write] extends [never]
     ? {}
     : { set(this: void, value: Write, ...args: Args<{ args: Arguments }>): void }
+  : {});
+
+export type FieldVariant<Read, Write, Writable extends boolean> = {
+  readonly storageKey: string;
+  get(this: void): Read;
+  require(this: void): NonNullable<Read>;
+} & (Writable extends true
+  ? [Write] extends [never]
+    ? {}
+    : { set(this: void, value: Write): void }
   : {});
 
 type ScalarAccessors<Fields extends Record<string, ScalarField>, W extends boolean> = {
@@ -133,7 +145,15 @@ type LinkedAccessors<
               key: FieldKeys<Fields[K]>,
               filters?: Filters<Fields[K]>,
             ): TypedConnection<S, Target<S, Fields[K]>, W> | undefined;
-          }
+          } & (W extends true
+            ? {
+                /** Create or reuse a Relay-compatible handled connection. */
+                createConnection(
+                  key: FieldKeys<Fields[K]>,
+                  filters?: Filters<Fields[K]>,
+                ): TypedConnection<S, Target<S, Fields[K]>, true>;
+              }
+            : {})
       : W extends true
         ? {
             /** Append once by Relay record ID; leaves existing entries in place. */
@@ -167,7 +187,16 @@ export type TypedRecord<
       as<P extends Extract<S[T]["possibleTypes"], Name<S>>>(
         type: P,
       ): TypedRecord<S, P, Writable> | undefined;
-    };
+    } & (Writable extends true
+      ? {
+          invalidate(this: void): void;
+          /** Explicitly assign a possible concrete typename and return its typed handle. */
+          setType<P extends Extract<S[T]["possibleTypes"], Name<S>>>(
+            this: void,
+            type: P,
+          ): TypedRecord<S, P, true>;
+        }
+      : {});
   };
 
 type ConnectionNode<S extends StoreTypes, C extends Name<S>, W extends boolean> = TypedRecord<
@@ -260,10 +289,14 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
   >;
 } & (W extends true
   ? {
-      upsert<T extends Concrete<S>, const Values extends RequiredCreation<S, T>>(
-        type: T,
-        values: Values & CheckCreation<S, T, Values>,
+      upsert<T extends Name<S>, const Values extends RequiredCreation<S, NoInfer<T>>>(
+        type: T &
+          (S[T]["concrete"] extends true
+            ? unknown
+            : { readonly error: `Abstract type; use ${S[T]["possibleTypes"]}` }),
+        values: Values & CheckCreation<S, NoInfer<T>, Values>,
       ): TypedRecord<S, T, true>;
+      invalidateStore(): void;
       delete<T extends Name<S>>(type: T, id: string, options?: DeleteOptions): void;
     }
   : {});
@@ -276,15 +309,24 @@ export interface StoreAPI<S extends StoreTypes, Q extends Name<S>> {
     environment: IEnvironment,
     callback: (store: TypedStore<S, Q, false>) => R & Sync<R>,
   ): R;
-  withUpdater<R>(
+  proxy<R>(
     this: void,
     environment: IEnvironment,
+    raw: RecordSourceProxy,
+    callback: (store: TypedStore<S, Q, true>) => R & Sync<R>,
+  ): R;
+  proxy<R>(
+    this: void,
     raw: RecordSourceProxy,
     callback: (store: TypedStore<S, Q, true>) => R & Sync<R>,
   ): R;
   updater<Data = unknown, R = void>(
     this: void,
     environment: IEnvironment,
+    callback: (store: TypedStore<S, Q, true>, data: Data | null | undefined) => R & Sync<R>,
+  ): (raw: RecordSourceProxy, data?: Data | null) => void;
+  updater<Data = unknown, R = void>(
+    this: void,
     callback: (store: TypedStore<S, Q, true>, data: Data | null | undefined) => R & Sync<R>,
   ): (raw: RecordSourceProxy, data?: Data | null) => void;
 }

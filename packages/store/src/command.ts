@@ -17,6 +17,7 @@ Options:
   -o, --output <path>        Write TypeScript to a file (default: stdout; - for stdout)
       --cwd <path>           Base directory for discovery and relative paths
       --native-helper <path> Override the native Relay schema helper executable
+      --types <names>        Type roots, selected (default), or all for the full schema
   -h, --help                 Show help
   -v, --version              Show the package version
 
@@ -59,6 +60,7 @@ export async function runCli(
         output: { type: "string", short: "o" },
         cwd: { type: "string" },
         "native-helper": { type: "string" },
+        types: { type: "string" },
         help: { type: "boolean", short: "h" },
         version: { type: "boolean", short: "v" },
       },
@@ -90,6 +92,18 @@ export async function runCli(
       : config;
     const source = generateStore(loaded.schema, {
       scalarTypes: { ...object(config.customScalarTypes), ...object(project.customScalarTypes) },
+      ...(values.types !== undefined
+        ? {
+            types:
+              values.types === "selected" || values.types === "all"
+                ? values.types
+                : values.types
+                    .split(",")
+                    .map((name) => name.trim())
+                    .filter(Boolean),
+          }
+        : {}),
+      onWarning: (message) => io.stderr(`relay-store: ${message}\n`),
     });
     if (!values.output || values.output === "-") io.stdout(source);
     else {

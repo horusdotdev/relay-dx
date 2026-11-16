@@ -49,7 +49,7 @@ describe("selection-aware upserts", () => {
     const environment = seed();
     environment.commitUpdate((raw) => {
       raw.create("partial-user", "User");
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         const post = view.upsert("Post", {
           id: "post",
           title: "Hello",

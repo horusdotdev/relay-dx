@@ -24,6 +24,10 @@ export interface GenerateStoreOptions {
   connectionKeys?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /** Selected fields by type; true additionally requires the field via @required. */
   selectedFields?: Readonly<Record<string, Readonly<Record<string, boolean>>>>;
+  /** Defaults to document-selected roots when available, otherwise all types. */
+  types?: readonly string[] | "selected" | "all";
+  /** Receives diagnostics for omitted unsupported fields; defaults to console.warn. */
+  onWarning?: (message: string) => void;
 }
 const q = JSON.stringify;
 const primitives: Record<string, string> = {
@@ -69,10 +73,9 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
   const query = schema.getQueryType();
   if (!query) throw new Error("Store generation requires a query root.");
   const all = Object.values(schema.getTypeMap()).sort((a, b) => a.name.localeCompare(b.name));
-  const types = all
+  let types = all
     .filter(isCompositeType)
     .filter((type) => !type.name.startsWith("__") && !hasDirective(type, "__RelayResolverModel"));
-  const included = new Set(types.map((type) => type.name));
   const relay = schema.extensions.relay as
     | {
         connectionKeys?: GenerateStoreOptions["connectionKeys"];
@@ -81,6 +84,64 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
     | undefined;
   const connectionKeys = options.connectionKeys ?? relay?.connectionKeys ?? {};
   const selectedFields = options.selectedFields ?? relay?.selectedFields;
+  const scope = options.types ?? (selectedFields === undefined ? "all" : "selected");
+  if (scope !== "all") {
+    if (scope === "selected" && selectedFields === undefined)
+      throw new Error('types: "selected" requires document field selections.');
+    const available = new Map(types.map((type) => [type.name, type]));
+    const selectedRoots = new Set(Object.keys(selectedFields ?? {}));
+    if (scope === "selected") {
+      // A selection of only __typename need not produce fields on the linked type.
+      for (const [name, fields] of Object.entries(selectedFields!)) {
+        const owner = available.get(name);
+        if (!owner || (!isObjectType(owner) && !isInterfaceType(owner))) continue;
+        for (const name of Object.keys(fields)) {
+          const field = owner.getFields()[name];
+          if (
+            !field ||
+            hasDirective(field, "relay_resolver") ||
+            hasDirective(field, "unselectable")
+          )
+            continue;
+          const target = getNamedType(field.type);
+          if (isCompositeType(target)) selectedRoots.add(target.name);
+        }
+      }
+    }
+    const roots =
+      scope === "selected" ? [...selectedRoots].filter((name) => available.has(name)) : scope;
+    const reachable = new Set<string>();
+    const visit = (name: string) => {
+      if (reachable.has(name)) return;
+      const type = available.get(name);
+      if (!type) throw new Error(`Unknown stored type in generation roots: ${name}.`);
+      reachable.add(name);
+      if (!isObjectType(type))
+        for (const member of schema.getPossibleTypes(type)) visit(member.name);
+      if (isObjectType(type) || isInterfaceType(type)) {
+        for (const field of Object.values(type.getFields())) {
+          if (hasDirective(field, "relay_resolver") || hasDirective(field, "unselectable"))
+            continue;
+          const target = getNamedType(field.type);
+          if (isCompositeType(target) && available.has(target.name)) visit(target.name);
+        }
+      }
+    };
+    // Operation roots must not pull unselected operations' result types back in.
+    const operationRoots = new Set([
+      query.name,
+      schema.getMutationType()?.name,
+      schema.getSubscriptionType()?.name,
+    ]);
+    for (const root of roots.filter((name) => name !== query.name)) {
+      if (scope === "selected" && operationRoots.has(root)) reachable.add(root);
+      else visit(root);
+    }
+    if (scope !== "selected" && roots.includes(query.name)) visit(query.name);
+    reachable.add(query.name);
+    types = types.filter((type) => reachable.has(type.name));
+  }
+  const included = new Set(types.map((type) => type.name));
   const possible = (value: (typeof types)[number]) =>
     isObjectType(value) ? [value.name] : schema.getPossibleTypes(value).map((item) => item.name);
   function semanticLevels(field: GraphQLField<unknown, unknown>): Set<number> {
@@ -127,11 +188,11 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
   function scalar(type: GraphQLNamedType): { text: string; writable: boolean } {
     if (isEnumType(type))
       return {
-        text:
-          type
-            .getValues()
-            .map((value) => q(value.name))
-            .join(" | ") || "never",
+        text: type
+          .getValues()
+          .map((value) => q(value.name))
+          .concat(q("%future added value"))
+          .join(" | "),
         writable: true,
       };
     const mapped = primitives[type.name] ?? options.scalarTypes?.[type.name];
@@ -210,8 +271,12 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
         const composite = isCompositeType(target);
         if (composite && !included.has(target.name)) continue;
         const ref = reference(field.type);
-        if (composite && ref.element?.element)
-          throw new Error(`Nested linked lists are unsupported: ${type.name}.${field.name}`);
+        if (composite && ref.element?.element) {
+          (options.onWarning ?? console.warn)(
+            `Skipping unsupported nested linked list: ${type.name}.${field.name}`,
+          );
+          continue;
+        }
         const args = Object.fromEntries(
           field.args.map((arg) => [
             arg.name,

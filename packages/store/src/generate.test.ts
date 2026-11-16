@@ -5,9 +5,98 @@ import { fileURLToPath } from "node:url";
 import { buildSchema } from "graphql";
 import { describe, expect, it } from "vite-plus/test";
 import { loadRelaySchema } from "@relay-dx/schema";
-import { generateStore } from "./generate.js";
+import { generateStore, type GenerateStoreOptions } from "./generate.js";
 
 describe("schema-generated record types", () => {
+  it("skips nested record lists with a diagnostic while preserving usable fields", () => {
+    const warnings: string[] = [];
+    const generated = generateStore(
+      buildSchema(
+        "type Query { grid: Grid } type Grid { cells: [[Cell!]]! label: String! } type Cell { value: Int! }",
+      ),
+      { onWarning: (warning: string) => warnings.push(warning) },
+    );
+    expect(warnings).toEqual(["Skipping unsupported nested linked list: Grid.cells"]);
+    expect(generated).not.toContain('"cells"');
+    expect(generated).toContain('"label": ScalarField<string | null | undefined, string');
+  });
+
+  it("accepts Relay's future enum sentinel in scalar reads, writes and initializers", () => {
+    const generated = generateStore(
+      buildSchema("enum Priority { LOW HIGH } type Query { priority: Priority! }"),
+    );
+    expect(generated).toContain('"LOW" | "HIGH" | "%future added value"');
+  });
+
+  it("limits generation to explicit roots and their linked concrete types", () => {
+    const schema = buildSchema(`
+      interface Asset { id: ID! }
+      type Audio implements Asset { id: ID! artist: Artist }
+      type Video implements Asset { id: ID! }
+      type Artist { name: String! }
+      type Invoice { amount: Int! }
+      type Query { asset: Asset invoice: Invoice }
+    `);
+    const full = generateStore(schema);
+    const subset = generateStore(schema, { types: ["Asset"] });
+    expect(subset).toContain('"Audio"');
+    expect(subset).toContain('"Video"');
+    expect(subset).toContain('"Artist"');
+    expect(subset).toContain('"Query"');
+    expect(subset).not.toContain('"Invoice"');
+    expect(subset).not.toContain('"invoice"');
+    expect(subset.length).toBeLessThan(full.length);
+    expect(() => generateStore(schema, { types: ["Typo"] })).toThrow("Unknown stored type");
+    expect(() => generateStore(schema, { types: "selected" })).toThrow("requires document");
+    expect(
+      generateStore(schema, {
+        types: "selected",
+        selectedFields: { Query: { asset: false }, Asset: { id: false } },
+      }),
+    ).toBe(
+      generateStore(schema, {
+        types: ["Asset"],
+        selectedFields: { Query: { asset: false }, Asset: { id: false } },
+      }),
+    );
+  });
+
+  it("defaults to document-selected roots with explicit full-schema and plain-schema fallbacks", () => {
+    const schema = buildSchema(`
+      type Query { studio: Studio invoice: Invoice }
+      type Studio { name: String! }
+      type Invoice { amount: Int! }
+    `);
+    const selectedFields = { Query: { studio: false }, Studio: { name: false } };
+    const scoped = generateStore(schema, { selectedFields });
+    expect(scoped).toBe(generateStore(schema, { selectedFields, types: "selected" }));
+    expect(scoped).toContain('"Studio"');
+    expect(scoped).not.toContain('"Invoice"');
+    expect(generateStore(schema, { selectedFields, types: "all" })).toContain('"Invoice"');
+    expect(generateStore(schema)).toBe(generateStore(schema, { types: "all" }));
+    expect(generateStore(schema, { selectedFields: {} })).not.toContain('"Studio"');
+    schema.extensions = { relay: { selectedFields } };
+    expect(generateStore(schema)).toBe(scoped);
+  });
+
+  it("includes selected linked types without own field selections and scopes mutation results", () => {
+    const schema = buildSchema(`
+      type Query { preview: Preview }
+      type Mutation { publish: Preview charge: Receipt }
+      type Preview { title: String! }
+      type Receipt { amount: Int! }
+    `);
+    const selections: NonNullable<GenerateStoreOptions["selectedFields"]>[] = [
+      { Query: { preview: false } },
+      { Mutation: { publish: false } },
+    ];
+    for (const selectedFields of selections) {
+      const generated = generateStore(schema, { selectedFields });
+      expect(generated).toContain('"Preview"');
+      expect(generated).not.toContain('"Receipt"');
+    }
+  });
+
   it("tightens initializer requirements when another document starts selecting a non-null field", () => {
     const schema = buildSchema(
       "type Query { post: Post } type Post { id: ID! title: String! body: String! }",
@@ -104,7 +193,9 @@ describe("schema-generated record types", () => {
       new URL("../fixtures/__generated__/store.ts", import.meta.url),
       "utf8",
     );
-    expect(generateStore(schema.schema, { scalarTypes: { URL: "string" } })).toBe(generated);
+    expect(generateStore(schema.schema, { scalarTypes: { URL: "string" }, types: "all" })).toBe(
+      generated,
+    );
   });
 
   it("excludes resolvers, internal fields and resolver model objects", () => {
@@ -127,6 +218,12 @@ describe("schema-generated record types", () => {
     expect(generated).not.toContain('"computed"');
     expect(generated).not.toContain('"__internal"');
     expect(generated).not.toContain('"Model"');
+    const scoped = generateStore(schema, {
+      types: "selected",
+      selectedFields: { Query: { stored: false }, Model: { id: false } },
+    });
+    expect(scoped).toContain('"stored": ScalarField<string | null | undefined, string');
+    expect(scoped).not.toContain('"Model"');
   });
 
   it("uses primitive scalar mappings while keeping unsupported scalars read-only and unknown", () => {

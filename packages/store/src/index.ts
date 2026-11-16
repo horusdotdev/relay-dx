@@ -1,9 +1,11 @@
 import {
   ConnectionHandler,
+  ConnectionInterface,
   Record as RelayRecordExport,
   ROOT_ID,
   ROOT_TYPE,
   getStorageKey,
+  generateClientID,
   type IEnvironment,
   type RecordProxy,
   type RecordSourceProxy,
@@ -21,7 +23,7 @@ import { pruneCollections } from "./prune.js";
 import { linkedID, listIDs, updaterRecords } from "./updater.js";
 export type * from "./types.js";
 
-// @types/relay-runtime 20 declares this runtime namespace as a class instance.
+// Relay's declarations describe this runtime namespace as a class instance.
 const RelayRecord = RelayRecordExport as unknown as InstanceType<typeof RelayRecordExport>;
 
 /** Use public getStorageKey with variable arguments so nested values are stable. */
@@ -73,9 +75,13 @@ const recordStates = new WeakMap<object, RuntimeRecord>();
 class Scope {
   active = true;
   readonly definition: SchemaDefinition;
-  readonly environment: IEnvironment;
+  readonly environment: IEnvironment | undefined;
   readonly raw: RecordSourceProxy | undefined;
-  constructor(definition: SchemaDefinition, environment: IEnvironment, raw?: RecordSourceProxy) {
+  constructor(
+    definition: SchemaDefinition,
+    environment: IEnvironment | undefined,
+    raw?: RecordSourceProxy,
+  ) {
     this.definition = definition;
     this.environment = environment;
     this.raw = raw;
@@ -86,7 +92,19 @@ class Scope {
   }
   source() {
     this.check();
-    return this.environment.getStore().getSource();
+    return required(this.environment, "environment for source reads").getStore().getSource();
+  }
+  stored(id: string) {
+    this.check();
+    return this.raw
+      ? updaterRecords(this.raw).unstable_getRawRecordWithChanges(id)
+      : this.source().get(id);
+  }
+  recordIDs(): readonly string[] {
+    this.check();
+    return this.raw
+      ? [...new Set(updaterRecords(this.raw).__sources.flatMap((source) => source.getRecordIDs()))]
+      : this.source().getRecordIDs();
   }
   type(type: string) {
     return required(this.definition.types[type], `schema type ${type}`);
@@ -94,7 +112,7 @@ class Scope {
   actualType(id: string): string | undefined {
     this.check();
     if (id === ROOT_ID) {
-      const actual = this.raw?.get(id)?.getType() ?? this.source().get(id)?.__typename;
+      const actual = this.raw ? this.raw.get(id)?.getType() : this.source().get(id)?.__typename;
       if (actual === ROOT_TYPE) return this.definition.query;
       return actual;
     }
@@ -136,7 +154,10 @@ class Scope {
   upsert(type: string, values: Readonly<Record<string, unknown>>): RecordView {
     this.check(true);
     const definition = this.type(type);
-    if (!definition.concrete) throw new Error(`Cannot upsert abstract type ${type}.`);
+    if (!definition.concrete)
+      throw new Error(
+        `Cannot upsert abstract type ${type}; use ${definition.possibleTypes.join(" | ")}.`,
+      );
     const id = values.id;
     if (typeof id !== "string") throw new Error("Record creation requires a string id.");
     const existing = this.lookup(type, id);
@@ -162,6 +183,13 @@ class Scope {
       } else accessor.set(value);
     }
     return record.view();
+  }
+  invalidateStore(): void {
+    this.check(true);
+    const raw = this.raw as RecordSourceProxy & { invalidateStore?: () => void };
+    if (typeof raw.invalidateStore !== "function")
+      throw new Error("Store invalidation requires a Relay selector updater proxy.");
+    raw.invalidateStore();
   }
   delete(type: string, id: string, options: DeleteOptions = {}): void {
     this.check(true);
@@ -197,7 +225,13 @@ class Scope {
       get: this.get.bind(this),
       getRoot: this.getRoot.bind(this),
       connections: this.connections.bind(this),
-      ...(this.raw ? { upsert: this.upsert.bind(this), delete: this.delete.bind(this) } : {}),
+      ...(this.raw
+        ? {
+            upsert: this.upsert.bind(this),
+            delete: this.delete.bind(this),
+            invalidateStore: this.invalidateStore.bind(this),
+          }
+        : {}),
     };
   }
 }
@@ -227,6 +261,13 @@ class RuntimeRecord {
       throw new Error(`${type} is not a concrete refinement of ${this.type}.`);
     }
     return this.getType() === type ? this.scope.get(type, this.id) : undefined;
+  }
+  setType(type: string): RecordView {
+    this.scope.check(true);
+    if (!this.scope.type(this.type).possibleTypes.includes(type) || !this.scope.type(type).concrete)
+      throw new Error(`${type} is not a concrete refinement of ${this.type}.`);
+    this.scope.native(this).setValue(type, "__typename");
+    return required(this.scope.get(type, this.id), this.id);
   }
   field(
     name: string,
@@ -262,7 +303,7 @@ class RuntimeRecord {
       if (!Object.hasOwn(Object.prototype, key) || value !== Reflect.get(Object.prototype, key))
         return copyValue(value);
     }
-    const record = this.scope.source().get(this.id);
+    const record = this.scope.stored(this.id);
     return record && Object.hasOwn(record, key)
       ? copyValue(RelayRecord.getValue(record, key))
       : undefined;
@@ -366,6 +407,12 @@ class RuntimeRecord {
         getDataID: this.getDataID.bind(this),
         getType: this.getType.bind(this),
         as: this.as.bind(this),
+        ...(this.scope.raw
+          ? {
+              invalidate: () => this.scope.native(this).invalidateRecord(),
+              setType: this.setType.bind(this),
+            }
+          : {}),
       }),
     });
     const fields = this.scope.type(this.type).fields;
@@ -395,6 +442,13 @@ class RuntimeRecord {
     const accessor: Record<string, unknown> = {
       get: read,
       require: (args?: Variables) => required(read(args), `${this.type}.${name}`),
+      variants: () => {
+        this.scope.check();
+        const record = this.scope.stored(this.id);
+        return Object.keys(record ?? {})
+          .filter((key) => key === name || key.startsWith(`${name}(`))
+          .map((key) => this.variant(name, field, key));
+      },
     };
     if (this.scope.raw && field.writable) {
       accessor.set = (value: unknown, args?: Variables) => {
@@ -435,8 +489,61 @@ class RuntimeRecord {
         this.scope.check();
         return Object.freeze([...(field.connectionKeys ?? [])]);
       };
+      if (this.scope.raw)
+        accessor.createConnection = (key: string, filters?: Variables) =>
+          this.connections(name).create(key, filters);
     }
     return Object.freeze(accessor);
+  }
+  variant(name: string, field: FieldDefinition, key: string): object {
+    // A storage key is opaque: do not parse Relay's argument encoding back into variables.
+    const read = () => {
+      this.scope.check();
+      const record = this.scope.stored(this.id);
+      if (!record || !Object.hasOwn(record, key)) return undefined;
+      const value = record[key];
+      if (field.kind === "scalar") return copyValue(value);
+      if (value == null) return value;
+      const target = named(field.type);
+      if (field.type.element)
+        return listIDs(record, key).map((id) => (id == null ? id : this.scope.get(target, id)));
+      const id = linkedID(value);
+      return id === undefined ? undefined : this.scope.get(target, id);
+    };
+    const variant: Record<string, unknown> = {
+      storageKey: key,
+      get: read,
+      require: () => required(read(), `${this.type}.${key}`),
+    };
+    if (this.scope.raw && field.writable) {
+      variant.set = (value: unknown) => {
+        this.scope.check(true);
+        const native = this.scope.native(this);
+        if (field.kind === "scalar") {
+          writableValue(value, field.type, `${this.type}.${name}`);
+          native.setValue(copyValue(value) as Parameters<RecordProxy["setValue"]>[0], key);
+        } else if (value === null) {
+          if (!field.type.nullable) throw new Error(`Cannot write null to ${this.type}.${name}.`);
+          native.setValue(null, key);
+        } else {
+          const linked = (view: RecordView) => {
+            const record = this.scope.state(view);
+            this.scope.lookup(named(field.type), record.id);
+            return this.scope.native(record);
+          };
+          if (field.type.element) {
+            const records = (value as readonly (RecordView | null)[]).map((view) => {
+              if (view !== null) return linked(view);
+              if (!field.type.element!.nullable)
+                throw new Error(`Cannot write a null item to ${this.type}.${name}.`);
+              return null;
+            });
+            native.setLinkedRecords(records, key);
+          } else native.setLinkedRecord(linked(value as RecordView), key);
+        }
+      };
+    }
+    return Object.freeze(variant);
   }
 }
 
@@ -634,10 +741,46 @@ class RuntimeFamily {
     this.scope.check();
     this.checkKey(key);
     if (!this.parentID) throw new Error("Selecting one connection requires a parent record.");
-    const id = ConnectionHandler.getConnectionID(this.parentID, key, filters);
+    const parent = this.scope.stored(this.parentID);
+    const id =
+      linkedID(parent?.[storageKey(`__${key}_connection`, filters)]) ??
+      ConnectionHandler.getConnectionID(this.parentID, key, filters);
     return this.scope.get(this.target, id)
       ? new RuntimeConnection(this.scope, this.target, id)
       : undefined;
+  }
+  create(key: string, filters?: Variables): RuntimeConnection {
+    this.scope.check(true);
+    this.checkKey(key);
+    const parentID = required(this.parentID, "parent for connection creation");
+    const config = ConnectionInterface.get();
+    const definition = this.scope.type(this.target);
+    const pageField = required(definition.fields[config.PAGE_INFO], "connection pageInfo field");
+    const pageType = named(pageField.type);
+    if (!definition.concrete || !this.scope.type(pageType).concrete)
+      throw new Error("Connection creation requires concrete connection and pageInfo types.");
+    const parent = required(this.scope.raw!.get(parentID), parentID);
+    const handle = `__${key}_connection`;
+    const existing = parent.getLinkedRecord(handle, filters);
+    const id = existing?.getDataID() ?? ConnectionHandler.getConnectionID(parentID, key, filters);
+    this.scope.lookup(this.target, id);
+    const connection = this.scope.raw!.get(id) ?? this.scope.raw!.create(id, this.target);
+    if (connection.getValue("__connection_next_edge_index") == null)
+      connection.setValue(0, "__connection_next_edge_index");
+    if (connection.getLinkedRecords(config.EDGES) == null)
+      connection.setLinkedRecords([], config.EDGES);
+    if (!connection.getLinkedRecord(config.PAGE_INFO)) {
+      const pageID = generateClientID(id, config.PAGE_INFO);
+      this.scope.lookup(pageType, pageID);
+      const page = this.scope.raw!.get(pageID) ?? this.scope.raw!.create(pageID, pageType);
+      page.setValue(false, config.HAS_NEXT_PAGE);
+      page.setValue(false, config.HAS_PREV_PAGE);
+      page.setValue(null, config.START_CURSOR);
+      page.setValue(null, config.END_CURSOR);
+      connection.setLinkedRecord(page, config.PAGE_INFO);
+    }
+    parent.setLinkedRecord(connection, handle, filters);
+    return new RuntimeConnection(this.scope, this.target, id);
   }
   include(...records: readonly RecordView[]): this {
     this.scope.check();
@@ -650,11 +793,10 @@ class RuntimeFamily {
   }
   variants(): RuntimeConnection[] {
     this.scope.check();
-    const source = this.scope.source();
     const ids = new Set<string>();
-    const parents = this.parentID ? [this.parentID] : source.getRecordIDs();
+    const parents = this.parentID ? [this.parentID] : this.scope.recordIDs();
     for (const parentID of parents) {
-      const published = source.get(parentID);
+      const published = this.scope.stored(parentID);
       if (!published) continue;
       const parent = this.scope.getParentIfMatching(this.parentType, parentID);
       if (!parent) continue;
@@ -674,10 +816,7 @@ class RuntimeFamily {
         if (this.key !== undefined && handle !== `__${this.key}_connection`) continue;
         if (this.knownKeys && !this.knownKeys.some((key) => handle === `__${key}_connection`))
           continue;
-        // Resolve the current link, not its possibly outdated published target.
-        const currentID = this.scope.raw
-          ? this.scope.raw.get(parentID)?.getLinkedRecord(key)?.getDataID()
-          : RelayRecord.getLinkedRecordID(published, key);
+        const currentID = linkedID(published[key]);
         if (currentID && this.scope.actualType(currentID) === this.target) ids.add(currentID);
       }
     }
@@ -717,7 +856,7 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
   definition: SchemaDefinition,
 ): StoreAPI<S, Q> {
   function run(
-    environment: IEnvironment,
+    environment: IEnvironment | undefined,
     raw: RecordSourceProxy | undefined,
     callback: (view: unknown) => unknown,
   ): unknown {
@@ -740,14 +879,22 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
     },
     read: (environment: IEnvironment, callback: (view: unknown) => unknown) =>
       run(environment, undefined, callback),
-    withUpdater: (
-      environment: IEnvironment,
-      raw: RecordSourceProxy,
-      callback: (view: unknown) => unknown,
-    ) => run(environment, raw, callback),
+    proxy: (
+      first: IEnvironment | RecordSourceProxy,
+      second: RecordSourceProxy | ((view: unknown) => unknown),
+      third?: (view: unknown) => unknown,
+    ) =>
+      typeof second === "function"
+        ? run(undefined, first as RecordSourceProxy, second)
+        : run(first as IEnvironment, second, required(third, "updater callback")),
     updater:
-      (environment: IEnvironment, callback: (view: unknown, data: unknown) => unknown) =>
+      (
+        first: IEnvironment | ((view: unknown, data: unknown) => unknown),
+        second?: (view: unknown, data: unknown) => unknown,
+      ) =>
       (raw: RecordSourceProxy, data?: unknown) =>
-        run(environment, raw, (view) => callback(view, data)),
+        run(typeof first === "function" ? undefined : first, raw, (view) =>
+          (typeof first === "function" ? first : required(second, "updater callback"))(view, data),
+        ),
   } as StoreAPI<S, Q>;
 }

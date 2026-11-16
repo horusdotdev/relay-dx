@@ -82,9 +82,9 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
   it("rejects linked records from another callback scope", () => {
     const environment = seed();
     environment.commitUpdate((raw) => {
-      store.withUpdater(environment, raw, (outer) => {
+      store.proxy(environment, raw, (outer) => {
         const foreign = outer.get("User", "u1")!;
-        store.withUpdater(environment, raw, (inner) => {
+        store.proxy(environment, raw, (inner) => {
           expect(() => inner.get("User", "u1")!.friend.set(foreign)).toThrow("same updater scope");
         });
       });
@@ -341,7 +341,7 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
     environment.commitUpdate((raw) => {
       const fresh = raw.create("unpublished", "PostConnection");
       fresh.setLinkedRecords([], "edges");
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         const family = view.get("Group", "g1")!.items.connections();
         expect(family.variants()).toHaveLength(2);
         expect(
@@ -460,7 +460,7 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
       const [first, second] = connection.getLinkedRecords("edges")!;
       const missingNode = raw.create("missing-node-edge", "PostEdge");
       connection.setLinkedRecords([first, null, missingNode, second], "edges");
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         const typed = view
           .get("Group", "g1")!
           .items.connection("StoreFixture_feed", { filter: draft })!;
@@ -519,7 +519,7 @@ describe("experimental typed store on compiler-normalized Relay 21 records", () 
   it("guards runtime field access, unsupported scalars, link types and creation", () => {
     const environment = seed();
     environment.commitUpdate((raw) => {
-      store.withUpdater(environment, raw, (view) => {
+      store.proxy(environment, raw, (view) => {
         const user = view.get("User", "u1")!;
         const bypass = user as unknown as Record<
           string,

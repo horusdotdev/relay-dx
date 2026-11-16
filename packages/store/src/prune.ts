@@ -29,6 +29,8 @@ export function pruneCollections(
     if (!record) continue;
     const type = record.__typename === "__Root" ? schema.query : record.__typename;
     const definition = typeof type === "string" ? schema.types[type] : undefined;
+    // Scoped generation cannot distinguish links from custom scalar objects on omitted types.
+    if (!definition) continue;
     for (const [key, value] of Object.entries(record)) {
       const name = key.split("(", 1)[0];
       const field = definition?.fields[name];
