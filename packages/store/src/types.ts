@@ -147,6 +147,12 @@ type LinkedAccessors<
             ): TypedConnection<S, Target<S, Fields[K]>, W> | undefined;
           } & (W extends true
             ? {
+                /** Point this handled field at an existing connection without copying it. */
+                linkConnection(
+                  key: FieldKeys<Fields[K]>,
+                  connection: TypedConnection<S, Target<S, Fields[K]>, true>,
+                  filters?: Filters<Fields[K]>,
+                ): void;
                 /** Create or reuse a Relay-compatible handled connection. */
                 createConnection(
                   key: FieldKeys<Fields[K]>,
@@ -182,6 +188,14 @@ export type TypedRecord<
     readonly [recordType]: T;
     /** Record operations live outside the GraphQL field namespace. */
     readonly $: {
+      field<
+        K extends keyof (ScalarAccessors<S[T]["scalars"], Writable> &
+          LinkedAccessors<S, S[T]["links"], Writable>),
+      >(
+        this: void,
+        name: K,
+      ): (ScalarAccessors<S[T]["scalars"], Writable> &
+        LinkedAccessors<S, S[T]["links"], Writable>)[K];
       getDataID(): string;
       getType(): S[T]["possibleTypes"];
       as<P extends Extract<S[T]["possibleTypes"], Name<S>>>(
@@ -189,6 +203,8 @@ export type TypedRecord<
       ): TypedRecord<S, P, Writable> | undefined;
     } & (Writable extends true
       ? {
+          /** Merge cached fields from a record with the same concrete typename. */
+          copyFrom(this: void, source: LinkedRecordInput<S, T>): void;
           invalidate(this: void): void;
           /** Explicitly assign a possible concrete typename and return its typed handle. */
           setType<P extends Extract<S[T]["possibleTypes"], Name<S>>>(
@@ -273,8 +289,17 @@ type RequiredCreation<S extends StoreTypes, T extends Name<S>> = {
 type CheckCreation<S extends StoreTypes, T extends Name<S>, Values> = {
   [K in keyof Values]: K extends keyof UpsertRecordInput<S, T> ? UpsertRecordInput<S, T>[K] : never;
 };
-export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends boolean> = {
+export type TypedStore<
+  S extends StoreTypes,
+  Query extends Name<S>,
+  W extends boolean,
+  O extends Name<S> = never,
+> = {
+  /** IDs of live records, including current updater edits. */
+  ids(): readonly string[];
   get<T extends Name<S>>(type: T, id: string): TypedRecord<S, T, W> | undefined;
+  /** Scan live records matching a concrete type, interface, or union, including updater edits. */
+  getAll<T extends Name<S>>(type: T): ReadonlyArray<TypedRecord<S, T, W>>;
   getRoot(): TypedRecord<S, Query, W>;
   connections<T extends Name<S>, K extends ConnectionKey<S, T>>(
     type: T,
@@ -289,6 +314,16 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
   >;
 } & (W extends true
   ? {
+      /** Read a selected operation field using Relay's selector and variables. */
+      getRootField<T extends O, K extends Extract<keyof S[T]["links"], string>>(
+        type: T,
+        field: K,
+      ): LinkRead<S, S[T]["links"][K], true>;
+      /** Shallow-copy cached fields while preserving the source concrete type. */
+      copy<T extends Name<S>>(
+        source: TypedRecord<S, T, true>,
+        targetId: string,
+      ): TypedRecord<S, T, true>;
       upsert<T extends Name<S>, const Values extends RequiredCreation<S, NoInfer<T>>>(
         type: T &
           (S[T]["concrete"] extends true
@@ -301,33 +336,35 @@ export type TypedStore<S extends StoreTypes, Query extends Name<S>, W extends bo
     }
   : {});
 type Sync<R> = R extends PromiseLike<unknown> ? never : R;
-export interface StoreAPI<S extends StoreTypes, Q extends Name<S>> {
+export interface StoreAPI<S extends StoreTypes, Q extends Name<S>, O extends Name<S> = never> {
+  /** Relay connection ID; parentID is a normalized record ID. */
+  connectionID(this: void, parentID: string, key: string, filters?: Variables): string;
   /** Generate once before committing, so optimistic replays reuse the same ID. */
   createClientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
   read<R>(
     this: void,
     environment: IEnvironment,
-    callback: (store: TypedStore<S, Q, false>) => R & Sync<R>,
+    callback: (store: TypedStore<S, Q, false, O>) => R & Sync<R>,
   ): R;
   proxy<R>(
     this: void,
     environment: IEnvironment,
     raw: RecordSourceProxy,
-    callback: (store: TypedStore<S, Q, true>) => R & Sync<R>,
+    callback: (store: TypedStore<S, Q, true, O>) => R & Sync<R>,
   ): R;
   proxy<R>(
     this: void,
     raw: RecordSourceProxy,
-    callback: (store: TypedStore<S, Q, true>) => R & Sync<R>,
+    callback: (store: TypedStore<S, Q, true, O>) => R & Sync<R>,
   ): R;
   updater<Data = unknown, R = void>(
     this: void,
     environment: IEnvironment,
-    callback: (store: TypedStore<S, Q, true>, data: Data | null | undefined) => R & Sync<R>,
+    callback: (store: TypedStore<S, Q, true, O>, data: Data | null | undefined) => R & Sync<R>,
   ): (raw: RecordSourceProxy, data?: Data | null) => void;
   updater<Data = unknown, R = void>(
     this: void,
-    callback: (store: TypedStore<S, Q, true>, data: Data | null | undefined) => R & Sync<R>,
+    callback: (store: TypedStore<S, Q, true, O>, data: Data | null | undefined) => R & Sync<R>,
   ): (raw: RecordSourceProxy, data?: Data | null) => void;
 }
 
@@ -351,5 +388,6 @@ export interface TypeDefinition {
 }
 export interface SchemaDefinition {
   readonly query: string;
+  readonly operationRoots?: readonly string[];
   readonly types: Readonly<Record<string, TypeDefinition>>;
 }

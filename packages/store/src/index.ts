@@ -9,6 +9,7 @@ import {
   type IEnvironment,
   type RecordProxy,
   type RecordSourceProxy,
+  type RecordSourceSelectorProxy,
   type Variables,
 } from "relay-runtime";
 import type {
@@ -204,6 +205,50 @@ class Scope {
     if (options.prune) pruneCollections(this.raw!, this.definition, id);
     if (record) this.raw!.delete(id);
   }
+  ids(): readonly string[] {
+    return this.recordIDs().filter((id) => this.stored(id) != null);
+  }
+  getAll(type: string): readonly RecordView[] {
+    this.check();
+    this.type(type);
+    return this.recordIDs().flatMap((id) => {
+      const record = this.getParentIfMatching(type, id);
+      return record ? [record.view()] : [];
+    });
+  }
+  getRootField(type: string, name: string): unknown {
+    this.check(true);
+    if (!this.definition.operationRoots?.includes(type))
+      throw new Error(`Not a generated operation root: ${type}.`);
+    const field = this.type(type).fields[name];
+    if (!Object.hasOwn(this.type(type).fields, name) || !field || field.kind !== "link")
+      throw new Error(`Not a linked root field: ${type}.${name}.`);
+    const raw = this.raw as RecordSourceSelectorProxy;
+    if (typeof raw.getRootField !== "function" || typeof raw.getPluralRootField !== "function")
+      throw new Error("Operation payload reads require a Relay selector updater proxy.");
+    const target = named(field.type);
+    if (field.type.element) {
+      const records = raw.getPluralRootField(name);
+      return records == null
+        ? records
+        : records.map((record) => (record == null ? record : this.get(target, record.getDataID())));
+    }
+    const record = raw.getRootField(name);
+    return record == null ? record : this.get(target, record.getDataID());
+  }
+  copy(source: RecordView, targetId: string): RecordView {
+    this.check(true);
+    const state = this.state(source);
+    const type = state.getType();
+    const existing = this.actualType(targetId);
+    if (targetId === ROOT_ID) throw new Error("Cannot copy into the root record.");
+    if (existing !== undefined && existing !== type)
+      throw new Error(`Cannot copy ${type} fields into ${existing}.`);
+    if (existing === undefined) this.raw!.create(targetId, type);
+    const target = required(this.lookup(state.type, targetId), targetId);
+    target.copyFrom(source);
+    return target.view();
+  }
   getRoot(): RecordView {
     return required(this.get(this.definition.query, ROOT_ID), "root record");
   }
@@ -222,11 +267,15 @@ class Scope {
   }
   view() {
     return {
+      ids: this.ids.bind(this),
       get: this.get.bind(this),
+      getAll: this.getAll.bind(this),
       getRoot: this.getRoot.bind(this),
       connections: this.connections.bind(this),
       ...(this.raw
         ? {
+            getRootField: this.getRootField.bind(this),
+            copy: this.copy.bind(this),
             upsert: this.upsert.bind(this),
             delete: this.delete.bind(this),
             invalidateStore: this.invalidateStore.bind(this),
@@ -244,6 +293,13 @@ class RuntimeRecord {
     this.scope = scope;
     this.type = type;
     this.id = id;
+  }
+  copyFrom(source: RecordView): void {
+    this.scope.check(true);
+    const state = this.scope.state(source);
+    if (this.getType() !== state.getType())
+      throw new Error(`Cannot copy ${state.getType()} fields into ${this.getType()}.`);
+    this.scope.native(this).copyFieldsFrom(this.scope.native(state));
   }
   getDataID(): string {
     this.scope.check();
@@ -404,11 +460,19 @@ class RuntimeRecord {
     const view: Record<string, unknown> = Object.create(null);
     Object.defineProperty(view, "$", {
       value: Object.freeze({
+        field: (name: string) => {
+          this.scope.check();
+          const field = this.scope.type(this.type).fields[name];
+          if (!Object.hasOwn(this.scope.type(this.type).fields, name))
+            throw new Error(`Unknown field ${this.type}.${name}.`);
+          return this.accessor(name, field);
+        },
         getDataID: this.getDataID.bind(this),
         getType: this.getType.bind(this),
         as: this.as.bind(this),
         ...(this.scope.raw
           ? {
+              copyFrom: this.copyFrom.bind(this),
               invalidate: () => this.scope.native(this).invalidateRecord(),
               setType: this.setType.bind(this),
             }
@@ -489,9 +553,15 @@ class RuntimeRecord {
         this.scope.check();
         return Object.freeze([...(field.connectionKeys ?? [])]);
       };
-      if (this.scope.raw)
+      if (this.scope.raw) {
+        accessor.linkConnection = (
+          key: string,
+          connection: { record: RecordView },
+          filters?: Variables,
+        ) => this.connections(name).link(key, connection.record, filters);
         accessor.createConnection = (key: string, filters?: Variables) =>
           this.connections(name).create(key, filters);
+      }
     }
     return Object.freeze(accessor);
   }
@@ -749,6 +819,18 @@ class RuntimeFamily {
       ? new RuntimeConnection(this.scope, this.target, id)
       : undefined;
   }
+  link(key: string, record: RecordView, filters?: Variables): void {
+    this.scope.check(true);
+    this.checkKey(key);
+    const parentID = required(this.parentID, "parent for connection linking");
+    const state = this.scope.state(record);
+    this.scope.lookup(this.target, state.id);
+    required(this.scope.raw!.get(parentID), parentID).setLinkedRecord(
+      this.scope.native(state),
+      `__${key}_connection`,
+      filters,
+    );
+  }
   create(key: string, filters?: Variables): RuntimeConnection {
     this.scope.check(true);
     this.checkKey(key);
@@ -852,9 +934,11 @@ class RuntimeFamily {
 }
 
 /** Generated metadata is the only runtime schema dependency. No GraphQL package in the app. */
-export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, string>>(
-  definition: SchemaDefinition,
-): StoreAPI<S, Q> {
+export function createStoreAPI<
+  S extends StoreTypes,
+  Q extends Extract<keyof S, string>,
+  O extends Extract<keyof S, string> = never,
+>(definition: SchemaDefinition): StoreAPI<S, Q, O> {
   function run(
     environment: IEnvironment | undefined,
     raw: RecordSourceProxy | undefined,
@@ -872,6 +956,7 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
   }
   // One audited bridge between generated phantom types and checked runtime views.
   return {
+    connectionID: ConnectionHandler.getConnectionID,
     createClientID: (type: string) => {
       if (!definition.types[type]?.concrete)
         throw new Error(`Client IDs require a concrete schema type: ${type}.`);
@@ -896,5 +981,5 @@ export function createStoreAPI<S extends StoreTypes, Q extends Extract<keyof S, 
         run(typeof first === "function" ? undefined : first, raw, (view) =>
           (typeof first === "function" ? first : required(second, "updater callback"))(view, data),
         ),
-  } as StoreAPI<S, Q>;
+  } as StoreAPI<S, Q, O>;
 }

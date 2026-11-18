@@ -309,3 +309,67 @@ it does not install `@types/relay-runtime`.
 [Source builds and demo](https://github.com/horusdotdev/relay-dx#development) · MIT
 
 Requires Relay 21.0.1, Node.js 22.18+ for generation, and `structuredClone` at runtime.
+
+## Operation payloads and record infrastructure
+
+Inside a mutation or subscription updater, use the schema root type and field
+name to read normalized payload records, including objects without an `id`:
+
+```ts
+const updater = store.updater((view) => {
+  const result = view.getRootField("Mutation", "updateValue");
+  result?.details.get()?.label.set("Updated");
+});
+```
+
+This requires regenerated metadata and a Relay selector updater, such as the
+`updater` passed to `commitMutation` or `requestSubscription`. Pass the schema
+field name even when the operation uses an alias. Relay resolves selected field
+arguments from the operation's variables. Plural fields return arrays and null
+results stay null. A field absent from the operation throws. Schema typing does
+not prove that a field belongs to the current operation. An ordinary
+`commitUpdate` callback has no operation selector and cannot read payloads.
+The existing callback `data` parameter and Query `getRoot()` are unchanged.
+
+`view.copy(source, targetId)` creates or merges a record with the source's runtime
+concrete type, including when the source handle is abstract.
+`target.$.copyFrom(source)` merges cached fields into an existing record of the
+same concrete type. Both use Relay's shallow field-copy behavior: linked records
+are shared, argument variants and unselected cached fields are copied, and fields
+absent from the source remain on the target. The target keeps its normalized
+record ID, but a selected GraphQL `id` scalar is copied like any other field.
+Copying does not require the complete initializer required by `upsert`.
+
+`target.items.linkConnection(key, connection, filters)` points a handled field at
+an existing typed connection returned by `.connection()` or `.createConnection()`.
+The connection must have the field's connection type and belong to the same
+callback scope. Its edges and pagination metadata are shared; later writes through
+either parent affect the same connection. The key and filters describe the target
+handle and obey the same types as `.connection(key, filters)`.
+
+`view.ids()` returns a snapshot of live normalized record IDs, including current
+updater creations and excluding deletions. It is also available in `store.read`.
+`view.getAll(type)` scans live records matching a generated concrete type,
+interface, or union. For example:
+
+```ts
+store.read(environment, (view) => {
+  const users = view.getAll("User");
+  const nodes = view.getAll("Node");
+  return nodes.map((node) => node.$.getDataID());
+});
+```
+
+Results are a snapshot of membership in unspecified order. Records retain the
+callback's read/write permissions and must be used within that callback. Updater
+scans include creations, deletions, and typename changes made so far. Abstract
+handles expose their common fields; use `.$.as(concreteType)` for other fields.
+Each call scans the store, so prefer `view.get(type, id)` when the ID is known.
+
+`record.$.field(name)` returns the usual accessor for a schema-checked dynamic
+field name, including `.variants()` and its opaque `storageKey` values.
+`store.connectionID(parentID, key, filters)` computes Relay's connection ID without
+a callback or environment. Pass the normalized parent ID (`client:root` for the
+Query root), the connection key, and non-pagination filters.
+
+GraphQL 16.14.2 and later 16.x releases, and GraphQL 17.x, are accepted as peers.

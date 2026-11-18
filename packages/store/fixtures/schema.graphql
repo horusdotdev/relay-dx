@@ -84,3 +84,19 @@ type Query {
   requiredNodes(input: Filter!): [Node]
   count(input: Filter!, scale: Int! = 2, label: String): Int!
 }
+
+type PayloadDetail {
+  label: String!
+}
+type Payload {
+  details: PayloadDetail
+}
+type Mutation {
+  updateValue(input: String!): Payload
+  updateValues: [Payload]
+}
+type Subscription {
+  valueChanged: Payload
+}
+
+union RecordItem = User | Post
