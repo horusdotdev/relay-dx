@@ -1,5 +1,19 @@
 # @relay-dx/store
 
+## 0.5.0
+
+### Minor Changes
+
+- 38db6bb: Add typed operation payload reads, shallow record copies, connection linking,
+  live record ID enumeration and type/interface/union scans, dynamic field accessors, and a standalone connection
+  ID helper. Regenerate store metadata to enable mutation and subscription root
+  field reads. Accept GraphQL 17 alongside supported GraphQL 16 releases.
+
+### Patch Changes
+
+- Updated dependencies [38db6bb]
+  - @relay-dx/schema@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes
