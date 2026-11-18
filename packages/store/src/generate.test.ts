@@ -8,6 +8,28 @@ import { loadRelaySchema } from "@relay-dx/schema";
 import { generateStore, type GenerateStoreOptions } from "./generate.js";
 
 describe("schema-generated record types", () => {
+  it("emits schema-named operation roots and excludes roots outside generation scope", () => {
+    const schema = buildSchema(`
+      schema { query: ReadRoot mutation: WriteRoot subscription: WatchRoot }
+      type ReadRoot { value: String }
+      type WriteRoot { update: Result }
+      type WatchRoot { changed: Result }
+      type Result { value: String }
+    `);
+    const generated = generateStore(schema);
+    expect(generated).toContain(
+      'createStoreAPI<StoreSchema, "ReadRoot", "WriteRoot" | "WatchRoot">',
+    );
+    expect(generated).toContain('"operationRoots": [\n    "WriteRoot",\n    "WatchRoot"\n  ]');
+    const selected = generateStore(schema, {
+      selectedFields: { WriteRoot: { update: true }, Result: { value: true } },
+    });
+    expect(selected).toContain('createStoreAPI<StoreSchema, "ReadRoot", "WriteRoot">');
+    expect(selected).not.toContain('"WatchRoot"');
+    const scoped = generateStore(schema, { types: ["Result"] });
+    expect(scoped).toContain('createStoreAPI<StoreSchema, "ReadRoot", never>');
+  });
+
   it("skips nested record lists with a diagnostic while preserving usable fields", () => {
     const warnings: string[] = [];
     const generated = generateStore(

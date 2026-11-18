@@ -21,7 +21,7 @@ export function verifyStoreConsumer(directory, configPath) {
     if (!statSync(packageJSON, { throwIfNoEntry: false })?.isFile()) continue;
     const installed = JSON.parse(readFileSync(packageJSON, "utf8"));
     assert.equal(installed.dependencies?.graphql, undefined);
-    assert.equal(installed.peerDependencies.graphql, "^16.14.2");
+    assert.equal(installed.peerDependencies.graphql, "^16.14.2 || ^17.0.0");
     assert.equal(createRequire(packageJSON).resolve("graphql"), consumerGraphQL);
   }
   const cli = join(packageDirectory, manifest.bin["relay-store"]);
@@ -53,6 +53,9 @@ environment.commitUpdate(raw => { raw.getRoot(); });
 environment.commitUpdate(store.updater(environment, view => {
   const user = view.upsert("User", { id: "consumer-user", name: "Ada", role: "VIEWER" });
   user.name.set("Ada");
+  const copied = view.copy(user, "consumer-copy");
+  copied.$.copyFrom(user);
+  if (copied.$.field("name").get() !== "Ada" || !view.ids().includes("consumer-copy")) throw new Error("Installed record helpers failed");
   view.getRoot().viewer.set(user);
   const firstID = store.createClientID("Post");
   if (!firstID.startsWith("client:Post:")) throw new Error("Installed client ID helper failed");

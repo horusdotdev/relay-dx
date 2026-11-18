@@ -23,7 +23,7 @@ try {
       ),
     );
   }
-  for (const graphqlVersion of ["16.14.2", "16.15.0"]) {
+  for (const graphqlVersion of ["16.14.2", "16.15.0", "17.1.0"]) {
     const consumer = join(temporary, `consumer-${graphqlVersion}`);
     await mkdir(consumer);
     await writeFile(
