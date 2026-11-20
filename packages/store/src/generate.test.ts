@@ -237,7 +237,10 @@ describe("schema-generated record types", () => {
     );
     const generated = generateStore(schema);
     expect(generated).toContain('"stored": ScalarField<string | null | undefined, string');
-    expect(generated).not.toContain('"computed"');
+    expect(generated).not.toContain('"computed": ScalarField');
+    expect(generated).toContain(
+      '"resolverFields": [\n        "computed",\n        "model"\n      ]',
+    );
     expect(generated).not.toContain('"__internal"');
     expect(generated).not.toContain('"Model"');
     const scoped = generateStore(schema, {

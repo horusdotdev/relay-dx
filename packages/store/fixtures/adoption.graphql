@@ -9,9 +9,11 @@ type Recording implements Media {
   id: ID!
   title: String!
   availability: Availability!
+  commonValue: String
   duration: Int!
 }
 type Episode implements Media {
+  commonValue: Int
   id: ID!
   title: String!
 }

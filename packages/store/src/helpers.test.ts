@@ -7,9 +7,11 @@ import {
   RecordSource,
   Store,
   commitMutation,
+  createOperationDescriptor,
   requestSubscription,
 } from "relay-runtime";
 import { store } from "../fixtures/__generated__/store.js";
+import typeQuery from "../fixtures/__generated__/TypeRefinementFixtureQuery.graphql.js";
 import mutation from "../fixtures/__generated__/PayloadFixtureMutation.graphql.js";
 import subscription from "../fixtures/__generated__/PayloadFixtureSubscription.graphql.js";
 import { seed, draft } from "../fixtures/environment.js";
@@ -175,6 +177,62 @@ describe("store infrastructure helpers", () => {
     store.read(environment, (view) => {
       expect(view.getAll("User").map((record) => record.name.get())).toEqual(["updated"]);
     });
+  });
+
+  it("computes typed connection IDs with parent-specific keys and filters", () => {
+    expect(store.connectionID("User", "u1", "StoreFixture_posts", { filter: draft })).toBe(
+      ConnectionHandler.getConnectionID("u1", "StoreFixture_posts", { filter: draft }),
+    );
+    expect(store.connectionID("HasPosts", "u1", "ConnectionKeysFixture_posts")).toBe(
+      ConnectionHandler.getConnectionID("u1", "ConnectionKeysFixture_posts"),
+    );
+    const unchecked = store.connectionID as (...args: unknown[]) => string;
+    expect(() => unchecked("User", "u1", "StoreFixture_feed")).toThrow("Unknown connection key");
+    expect(() => unchecked("User", "u1", "StoreFixture_posts", { first: 1 })).toThrow(
+      "Invalid connection filters",
+    );
+  });
+
+  it("returns the runtime concrete handle and enforces scope after refinement", () => {
+    const environment = seed();
+    const escaped = store.read(environment, (view) => {
+      const node = view.get("Node", "u1")!.$.concrete();
+      expect(node.$.getType()).toBe("User");
+      return view.get("Node", "u1")!.$.concrete;
+    });
+    expect(() => escaped()).toThrow("escaped");
+    environment.commitUpdate(
+      store.updater((view) => {
+        const user = view.get("HasPosts", "u1")!.$.concrete();
+        user.name.set("updated");
+        expect(user.name.get()).toBe("updated");
+        view.get("Node", "u1")!.$.setType("Post");
+        expect(view.get("Node", "u1")!.$.concrete().$.getType()).toBe("Post");
+      }),
+    );
+  });
+
+  it("reads Relay-normalized type-schema flags without inventing missing refinements", () => {
+    const environment = seed();
+    expect(
+      store.read(environment, (view) => view.getTypeRefinement("User", "Node")),
+    ).toBeUndefined();
+    environment.commitPayload(createOperationDescriptor(typeQuery, { id: "u1" }), {
+      node: { __typename: "User", __isNode: "User", id: "u1" },
+    });
+    store.read(environment, (view) => {
+      expect(view.getTypeRefinement("User", "Node")).toBe(true);
+      expect(view.getTypeRefinement("User", "HasPosts")).toBeUndefined();
+    });
+    environment.commitUpdate((raw) => {
+      raw.get("client:__type:User")!.setValue(false, "__isNode");
+      store.proxy(raw, (view) => expect(view.getTypeRefinement("User", "Node")).toBe(false));
+    });
+    const escaped = store.read(environment, (view) => {
+      expect(view.getTypeRefinement("User", "Node")).toBe(false);
+      return view.getTypeRefinement;
+    });
+    expect(() => escaped("User", "Node")).toThrow("escaped");
   });
 
   it("lists live IDs and resolves dynamic field variants including unpublished edits", () => {

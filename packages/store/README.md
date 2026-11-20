@@ -100,7 +100,7 @@ handles expire afterward. Read-only accessors have no `set` method.
 | View              | `get(type, id)`, `getRoot()`, updater-only `upsert(type, fields)`, `invalidateStore()` and `delete(type, id, { prune?: boolean })`                                                                                           |
 | Field             | `get(args?)`, `require(args?)`, `variants()`, updater-only `set(value, args?)`                                                                                                                                               |
 | Linked list       | Updater-only `append(record, args?)`, `prepend(record, args?)`                                                                                                                                                               |
-| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`; updater-only `$.invalidate()` and `$.setType(type)`                                                                                                                            |
+| Record            | `$.getDataID()`, `$.getType()`, `$.as(type)`, `$.concrete()`; updater-only `$.invalidate()` and `$.setType(type)`                                                                                                            |
 | Connection field  | `keys()`, `connections(key?)`, `connection(key, filters?)`; updater-only `createConnection(key, filters?)`                                                                                                                   |
 | Connection family | `variants()`, `include(record)`; updater-only `appendNode(node)`, `prependNode(node)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)`                                                                              |
 | Connection        | `record`, `nodes()`; updater-only `appendNode(node)`, `prependNode(node)`, `createEdge(node)`, `insertEdgeAfter(edge, cursor?)`, `insertEdgeBefore(edge, cursor?)`, `removeNodes(ids)`, `filter(predicate)`, `sort(compare)` |
@@ -108,6 +108,18 @@ handles expire afterward. Read-only accessors have no `set` method.
 `get(type, id)` returns `undefined` for absent/deleted records and throws on a type
 mismatch. `$.as(type)` returns a concrete refinement or `undefined`.
 Interfaces expose their declared fields; unions expose fields after `$.as()`.
+`record.$.concrete()` returns a union of the possible concrete handles, checked
+against the record's current typename. This exposes fields shared by every member,
+even when the interface doesn't declare them:
+
+```ts
+record.$.concrete().title.set(value); // if every concrete member has a compatible title field
+```
+
+Fields present on only some members still need `$.as(type)`. Conflicting field
+write types must satisfy every member's accessor; incompatible writes are rejected.
+Read callbacks keep read-only access. Like other handles, concrete handles must
+be used within their callback scope.
 Only valid concrete members are offered, including in connection callbacks.
 
 Updaters can call `record.$.invalidate()` or `view.invalidateStore()` to mark
@@ -340,6 +352,22 @@ absent from the source remain on the target. The target keeps its normalized
 record ID, but a selected GraphQL `id` scalar is copied like any other field.
 Copying does not require the complete initializer required by `upsert`.
 
+Resolver-cache links are excluded from copies, including argument variants. These
+links belong to the source record's evaluation and must not seed a different
+record's resolver cache. The target computes its own resolver results; caches
+already owned by the target are retained and follow Relay's normal invalidation.
+Regenerate metadata so dangling links to collected resolver records can also be
+identified. Existing metadata can recognize prefixed cache keys and links whose
+resolver records still exist.
+
+Migration note: `view.get(type, id)` throws when an existing record has an
+incompatible typename. Both copy helpers throw when source and target have
+different concrete typenames; they do not change the target's type. Missing or
+deleted records still produce `undefined` from `view.get`. Use `$.as(type)` when
+a nonmatching concrete refinement should return `undefined`, or `$.setType(type)`
+when assigning a different possible concrete type is intentional. These checks are
+stricter than Relay's raw record lookup and field-copy operations.
+
 `target.items.linkConnection(key, connection, filters)` points a handled field at
 an existing typed connection returned by `.connection()` or `.createConnection()`.
 The connection must have the field's connection type and belong to the same
@@ -368,8 +396,27 @@ Each call scans the store, so prefer `view.get(type, id)` when the ID is known.
 
 `record.$.field(name)` returns the usual accessor for a schema-checked dynamic
 field name, including `.variants()` and its opaque `storageKey` values.
-`store.connectionID(parentID, key, filters)` computes Relay's connection ID without
-a callback or environment. Pass the normalized parent ID (`client:root` for the
-Query root), the connection key, and non-pagination filters.
+`store.connectionID(type, parentID, key, filters?)` computes Relay's connection ID
+without a callback or environment. The parent schema type checks both the key and
+its non-pagination filters against generated connection fields. Query roots use
+the same form, with their schema type name and `client:root` as the parent ID:
+
+```ts
+store.connectionID("Query", "client:root", "Root_items", filters);
+store.connectionID("User", userID, "List_items", filters);
+```
+
+The keys in these examples must be declared for the respective schema fields.
+The old `connectionID(parentID, key, filters?)` form remains available for
+compatibility but is untyped and deprecated. Using the explicit parent type and
+ID avoids ambiguity between a Query type name and a normalized parent ID.
+
+`view.getTypeRefinement(concreteType, abstractType)` reads Relay's cached
+`__is<AbstractType>` flag from the corresponding `client:__type:*` record. Concrete
+and abstract type names are schema checked; interfaces and unions are accepted.
+The result is `true`, `false`, or `undefined` when Relay hasn't recorded the flag.
+This reads stored Relay knowledge rather than computing schema membership. It is
+read-only, available in read and updater callbacks, and sees current updater edits.
+Internal `__TypeSchema` records remain separate from GraphQL record handles.
 
 GraphQL 16.14.2 and later 16.x releases, and GraphQL 17.x, are accepted as peers.

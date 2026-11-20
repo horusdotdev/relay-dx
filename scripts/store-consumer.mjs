@@ -57,6 +57,10 @@ environment.commitUpdate(store.updater(environment, view => {
   copied.$.copyFrom(user);
   if (copied.$.field("name").get() !== "Ada" || !view.ids().includes("consumer-copy")) throw new Error("Installed record helpers failed");
   view.getRoot().viewer.set(user);
+  if (user.$.concrete().name.get() !== "Ada") throw new Error("Installed concrete handle failed");
+  const connectionID = store.connectionID("User", "consumer-user", "KitchenSinkQuery_posts");
+  if (connectionID !== store.connectionID("consumer-user", "KitchenSinkQuery_posts")) throw new Error("Installed typed connection ID failed");
+  if (view.getTypeRefinement("User", "Node") !== undefined) throw new Error("Installed cached refinement invented a flag");
   const firstID = store.createClientID("Post");
   if (!firstID.startsWith("client:Post:")) throw new Error("Installed client ID helper failed");
   const first = view.upsert("Post", { id: firstID, title: "Zulu", status: "DRAFT", author: user, tags: [] });
