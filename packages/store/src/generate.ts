@@ -257,10 +257,12 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
     const scalars: string[] = [];
     const links: string[] = [];
     const creation: string[] = [];
+    const resolverFields: string[] = [];
     if (isObjectType(type) || isInterfaceType(type)) {
       for (const field of Object.values(type.getFields()).sort((a, b) =>
         a.name.localeCompare(b.name),
       )) {
+        if (hasDirective(field, "relay_resolver")) resolverFields.push(field.name);
         if (
           field.name.startsWith("__") ||
           hasDirective(field, "relay_resolver") ||
@@ -327,6 +329,7 @@ export function generateStore(schema: GraphQLSchema, options: GenerateStoreOptio
       concrete: isObjectType(type),
       possibleTypes,
       fields,
+      ...(resolverFields.length ? { resolverFields } : {}),
       ...(shape ? { connection: shape } : {}),
     };
     shapes.push(

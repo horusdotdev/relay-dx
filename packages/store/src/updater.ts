@@ -7,6 +7,7 @@ export type LinkedIDs = readonly (string | null | undefined)[];
 interface UpdaterRecords {
   readonly __sources: readonly { getRecordIDs(): string[] }[];
   unstable_getRawRecordWithChanges(id: string): StoredRecord | null | undefined;
+  copyFieldsFromRecord(record: StoredRecord, id: string): void;
   setLinkedRecordIDs(id: string, key: string, ids: LinkedIDs): void;
 }
 
@@ -17,7 +18,8 @@ export function updaterRecords(raw: RecordSourceProxy): UpdaterRecords {
     !Array.isArray(mutator.__sources) ||
     mutator.__sources.some((source) => typeof source.getRecordIDs !== "function") ||
     typeof mutator.unstable_getRawRecordWithChanges !== "function" ||
-    typeof mutator.setLinkedRecordIDs !== "function"
+    typeof mutator.setLinkedRecordIDs !== "function" ||
+    typeof mutator.copyFieldsFromRecord !== "function"
   ) {
     throw new Error("Store collection helpers require the Relay 21.0.1 updater implementation.");
   }

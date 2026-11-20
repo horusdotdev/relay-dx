@@ -60,6 +60,20 @@ type Filters<F extends { args: unknown }> = Partial<
   Omit<F["args"], "first" | "after" | "last" | "before">
 >;
 type FieldKeys<F extends LinkedField> = F["keys"];
+type ConnectionIDArgs<S extends StoreTypes, T extends Name<S>> = {
+  [K in ConnectionKey<S, T>]: [
+    parentID: string,
+    key: FieldKeys<S[T]["links"][K]>,
+    filters?: Filters<S[T]["links"][K]>,
+  ];
+}[ConnectionKey<S, T>];
+type Abstract<S extends StoreTypes> = {
+  [T in Name<S>]: S[T]["concrete"] extends false ? T : never;
+}[Name<S>];
+/** A union of concrete handles, preserving each member's field and write types. */
+export type ConcreteRecord<S extends StoreTypes, T extends Name<S>, W extends boolean = false> = {
+  [P in Extract<S[T]["possibleTypes"], Name<S>>]: TypedRecord<S, P, W>;
+}[Extract<S[T]["possibleTypes"], Name<S>>];
 type Edge<S extends StoreTypes, C extends Name<S>> = S[C]["connection"] extends { edge: infer E }
   ? Extract<E, Name<S>>
   : never;
@@ -196,6 +210,8 @@ export type TypedRecord<
         name: K,
       ): (ScalarAccessors<S[T]["scalars"], Writable> &
         LinkedAccessors<S, S[T]["links"], Writable>)[K];
+      /** Return the actual concrete handle; common member fields are accessible on the union. */
+      concrete(this: void): ConcreteRecord<S, T, Writable>;
       getDataID(): string;
       getType(): S[T]["possibleTypes"];
       as<P extends Extract<S[T]["possibleTypes"], Name<S>>>(
@@ -203,7 +219,7 @@ export type TypedRecord<
       ): TypedRecord<S, P, Writable> | undefined;
     } & (Writable extends true
       ? {
-          /** Merge cached fields from a record with the same concrete typename. */
+          /** Merge data fields from the same concrete typename, excluding resolver-cache links. */
           copyFrom(this: void, source: LinkedRecordInput<S, T>): void;
           invalidate(this: void): void;
           /** Explicitly assign a possible concrete typename and return its typed handle. */
@@ -297,6 +313,8 @@ export type TypedStore<
 > = {
   /** IDs of live records, including current updater edits. */
   ids(): readonly string[];
+  /** Relay's cached __is<Abstract> flag, or undefined if it has not been recorded. */
+  getTypeRefinement(this: void, type: Concrete<S>, abstractType: Abstract<S>): boolean | undefined;
   get<T extends Name<S>>(type: T, id: string): TypedRecord<S, T, W> | undefined;
   /** Scan live records matching a concrete type, interface, or union, including updater edits. */
   getAll<T extends Name<S>>(type: T): ReadonlyArray<TypedRecord<S, T, W>>;
@@ -319,7 +337,7 @@ export type TypedStore<
         type: T,
         field: K,
       ): LinkRead<S, S[T]["links"][K], true>;
-      /** Shallow-copy cached fields while preserving the source concrete type. */
+      /** Shallow-copy data fields and the concrete type, excluding resolver-cache links. */
       copy<T extends Name<S>>(
         source: TypedRecord<S, T, true>,
         targetId: string,
@@ -337,7 +355,13 @@ export type TypedStore<
   : {});
 type Sync<R> = R extends PromiseLike<unknown> ? never : R;
 export interface StoreAPI<S extends StoreTypes, Q extends Name<S>, O extends Name<S> = never> {
-  /** Relay connection ID; parentID is a normalized record ID. */
+  /** Schema-checked connection key and filters, without requiring a store scope. */
+  connectionID<T extends Name<S>>(
+    this: void,
+    type: T,
+    ...args: ConnectionIDArgs<S, NoInfer<T>>
+  ): string;
+  /** @deprecated Untyped compatibility form. Prefer connectionID(type, parentID, key, filters). */
   connectionID(this: void, parentID: string, key: string, filters?: Variables): string;
   /** Generate once before committing, so optimistic replays reuse the same ID. */
   createClientID<T extends Concrete<S>>(this: void, type: T): `client:${T}:${string}`;
@@ -384,6 +408,7 @@ export interface TypeDefinition {
   readonly concrete: boolean;
   readonly possibleTypes: readonly string[];
   readonly fields: Readonly<Record<string, FieldDefinition>>;
+  readonly resolverFields?: readonly string[];
   readonly connection?: { readonly edge: string; readonly node: string };
 }
 export interface SchemaDefinition {

@@ -208,6 +208,17 @@ class Scope {
   ids(): readonly string[] {
     return this.recordIDs().filter((id) => this.stored(id) != null);
   }
+  getTypeRefinement(type: string, abstractType: string): boolean | undefined {
+    this.check();
+    if (!this.type(type).concrete || this.type(abstractType).concrete)
+      throw new Error("Type refinements require a concrete type and an interface or union.");
+    const record = this.stored(`client:__type:${type}`);
+    if (!record) return undefined;
+    if (record.__typename !== "__TypeSchema")
+      throw new Error(`Expected Relay __TypeSchema record for ${type}.`);
+    const value = record[`__is${abstractType}`];
+    return typeof value === "boolean" ? value : undefined;
+  }
   getAll(type: string): readonly RecordView[] {
     this.check();
     this.type(type);
@@ -268,6 +279,7 @@ class Scope {
   view() {
     return {
       ids: this.ids.bind(this),
+      getTypeRefinement: this.getTypeRefinement.bind(this),
       get: this.get.bind(this),
       getAll: this.getAll.bind(this),
       getRoot: this.getRoot.bind(this),
@@ -299,7 +311,25 @@ class RuntimeRecord {
     const state = this.scope.state(source);
     if (this.getType() !== state.getType())
       throw new Error(`Cannot copy ${state.getType()} fields into ${this.getType()}.`);
-    this.scope.native(this).copyFieldsFrom(this.scope.native(state));
+    this.scope.native(state);
+    const storedSource = required(this.scope.stored(state.id), state.id);
+    const resolverFields = this.scope.type(state.getType()).resolverFields ?? [];
+    const fields = Object.fromEntries(
+      Object.entries(storedSource).filter(([key, value]) => {
+        const id = linkedID(value);
+        // Metadata handles dangling caches; target typename also covers older generated stores.
+        return (
+          !key.startsWith("$r:") &&
+          !resolverFields.includes(key.split("(", 1)[0]) &&
+          !(id && this.scope.stored(id)?.__typename === "__RELAY_RESOLVER__")
+        );
+      }),
+    );
+    updaterRecords(this.scope.raw!).copyFieldsFromRecord(fields, this.id);
+  }
+  concrete(): RecordView {
+    this.scope.check();
+    return required(this.as(this.getType()), this.id);
   }
   getDataID(): string {
     this.scope.check();
@@ -467,6 +497,7 @@ class RuntimeRecord {
             throw new Error(`Unknown field ${this.type}.${name}.`);
           return this.accessor(name, field);
         },
+        concrete: this.concrete.bind(this),
         getDataID: this.getDataID.bind(this),
         getType: this.getType.bind(this),
         as: this.as.bind(this),
@@ -956,7 +987,33 @@ export function createStoreAPI<
   }
   // One audited bridge between generated phantom types and checked runtime views.
   return {
-    connectionID: ConnectionHandler.getConnectionID,
+    connectionID: (
+      first: string,
+      second: string,
+      third?: string | Variables,
+      fourth?: Variables,
+    ) => {
+      if (typeof third !== "string") return ConnectionHandler.getConnectionID(first, second, third);
+      const type = required(definition.types[first], `schema type ${first}`);
+      const fields = Object.values(type.fields).filter(
+        (field) =>
+          field.kind === "link" &&
+          !field.type.element &&
+          definition.types[named(field.type)]?.connection &&
+          field.connectionKeys?.includes(third),
+      );
+      if (!fields.length) throw new Error(`Unknown connection key ${third} for ${first}.`);
+      if (
+        !fields.some((field) =>
+          Object.keys(fourth ?? {}).every(
+            (key) =>
+              !["first", "after", "last", "before"].includes(key) && Object.hasOwn(field.args, key),
+          ),
+        )
+      )
+        throw new Error(`Invalid connection filters for ${first}.${third}.`);
+      return ConnectionHandler.getConnectionID(second, third, fourth);
+    },
     createClientID: (type: string) => {
       if (!definition.types[type]?.concrete)
         throw new Error(`Client IDs require a concrete schema type: ${type}.`);
