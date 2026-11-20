@@ -1,5 +1,19 @@
 # @relay-dx/store
 
+## 0.6.0
+
+### Minor Changes
+
+- ed900ce: Exclude Relay resolver-cache links from record copies so different records do not
+  share source-owned evaluations. Regenerated metadata also identifies dangling
+  resolver links. Add a schema-checked connection ID overload, concrete record
+  unions for accessing common member fields, and read-only cached type refinements.
+  Document lookup and copy typename checks and the legacy untyped connection ID form.
+
+### Patch Changes
+
+- @relay-dx/schema@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes
